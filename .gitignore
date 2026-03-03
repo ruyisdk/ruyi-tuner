@@ -1,0 +1,8 @@
+tmp/
+llvm_tools/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Generated outputs
+output/*
