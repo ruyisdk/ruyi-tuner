@@ -43,6 +43,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 可自主添加LLVM Pass到 `passes.txt` 文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
 
 ```bash
+mkdir -p output
 cd scripts
 python train.py \
     --dataset ../datasets \
