@@ -46,7 +46,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 mkdir -p output
 cd scripts
 python train.py \
-    --dataset ../datasets \
+    --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_tools \
     --output_dir ../output \
     --passfile ../passes.txt
@@ -72,7 +72,7 @@ python train.py \
 ```bash
 cd scripts
 python run.py \
-    --dataset ../datasets \
+    --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_tools \
     --paircsv ../output/Step3_EnumeratedPairs.csv
 ```
@@ -89,5 +89,8 @@ python run.py \
 - 输出所有文件的平均优化得分
 
 
+## 版本
 
+### 1. 1.0版本位于分支v1.0上；
 
+### 2. 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发。
