@@ -13,9 +13,9 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ```
 ├── datasets/           # LLVM IR (.ll) 测试文件
-├── llvm_tools/      # LLVM工具链二进制文件
+├── llvm_tools/         # LLVM工具链二进制文件
 ├── output/             # 训练输出结果
-│   ├── Step1_FindSynerPairs.csv      # 发现的协同Pass对
+│   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对
 │   ├── Step2_FilterSynerPairs.csv     # 过滤后的协同Pass对
 │   ├── Step3_EnumeratedPairs.csv      # 枚举的所有协同对
 ├── scripts/            # 主要执行脚本
@@ -24,10 +24,9 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 ├── utils/              # 工具模块
 │   ├── GA.py           # 遗传算法实现
 │   ├── PassSyner.py    # Pass协同效应分析
-│   ├── common.py       # 公共工具函数
-│   └── codesize_pairs.py  # 代码大小优化相关
+│   └── common.py       # 公共工具函数
 |── README.md           # 项目说明文档
-|── passes.txt           # 可自定义的LLVM Pass列表(应与llvm二进制文件的版本对应)
+|── passes_XXX.txt      # 可自定义的LLVM Pass列表(应与llvm二进制文件的版本对应,_后为版本号)
 ```
 
 ## 环境要求
@@ -40,7 +39,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ### 1. 训练阶段：发现协同Pass对
 
-可自主添加LLVM Pass到 `passes.txt` 文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
+可自主添加LLVM Pass到 `passes_XXXX.txt` 文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
 
 ```bash
 mkdir -p output
@@ -49,7 +48,7 @@ python train.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_tools \
     --output_dir ../output \
-    --passfile ../passes.txt
+    --passfile ../passes_21.1.8.txt
 ```
 
 **参数说明：**
