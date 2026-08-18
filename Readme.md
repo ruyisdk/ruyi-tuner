@@ -33,6 +33,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 - Python 3.7+
 - pandas
+- GLIBC_2.38 (required by ruyi-tuner/lib/libAutophase_21_1_8.so)
 - LLVM 工具链 (默认为 LLVM 21，如需使用其他版本，可以自行更换工具链以及pass列表)
 
 ## 使用方法
@@ -44,9 +45,9 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 ```bash
 mkdir -p output
 cd scripts
-python train.py \
+python3 train.py \
     --dataset ../datasets/x86 \
-    --llvm_tools_path ../llvm_tools \
+    --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
     --passfile ../passes_21.1.8.txt
 ```
@@ -70,9 +71,9 @@ python train.py \
 
 ```bash
 cd scripts
-python run.py \
+python3 run.py \
     --dataset ../datasets/x86 \
-    --llvm_tools_path ../llvm_tools \
+    --llvm_tools_path ../llvm_dir/build/bin \
     --paircsv ../output/Step3_EnumeratedPairs.csv
 ```
 
