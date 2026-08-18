@@ -1,5 +1,6 @@
 import os,ctypes
 import io,sys
+import re
 import subprocess
 
 
@@ -11,12 +12,27 @@ class AutophaseDataStruct(ctypes.Structure):
     _fields_ = [("name", ctypes.c_char * 64), ("value", ctypes.c_int)]
 
 
+# 在解析前移除LLVM 22 新增的libAutophase(LLVM 21.1.8 解析器)不能识别的部分语法
+_IR_NORMALIZE_PATTERNS = [
+    re.compile(r'nocreateundeforpoison\s*'),      # LLVM 22 新增属性
+    re.compile(r',?\s*target_mem\d+\s*:\s*\w+'),  # LLVM 22 新增 target 内存位置语法
+]
+
+def _normalize_ir(ir_code):
+    for pat in _IR_NORMALIZE_PATTERNS:
+        ir_code = pat.sub('', ir_code)
+    return ir_code
+
+
 def get_inst_count(ir_code):
     autophase_lib = ctypes.CDLL(lib_path)
     result_array = (AutophaseDataStruct * 56)()
-    autophase_lib.GetAutophase(ir_code.encode(), result_array)
+    autophase_lib.GetAutophase(_normalize_ir(ir_code).encode(), result_array)
     result_dict = {item.name.decode(): item.value for item in result_array}
-    return result_dict['TotalInsts']
+    count = result_dict.get('TotalInsts')
+    if count is None:
+        raise RuntimeError('libAutophase failed to parse LLVM IR (no TotalInsts in result)')
+    return count
 
 def fix_loop_nesting(pipeline: str) -> str:
     '''
@@ -87,6 +103,22 @@ def fix_loop_nesting(pipeline: str) -> str:
     return ','.join(fixed_passes)
 
 
+def _report_opt_failure(pipeline, stderr_text):
+    '''opt 执行失败时把关键报错信息打印到 stderr, 便于排查(如 unknown pass)'''
+    msg = (stderr_text or "").strip()
+    key_line = msg.splitlines()[-1] if msg else "no stderr output"
+    print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
+
+
+def _count_or_fallback(ir_code, fallback_ir_code, pipeline):
+    '''统计优化后 IR 的指令数; 若 libAutophase 解析失败则回退到输入 IR 的指令数并打印警告'''
+    try:
+        return get_inst_count(ir_code)
+    except RuntimeError as e:
+        print(f'[parse failed] passes="{pipeline}": {e}; using input IR count', file=sys.stderr)
+        return get_inst_count(fallback_ir_code)
+
+
 def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
 
     pipeline = ",".join(opt_flags)
@@ -105,8 +137,9 @@ def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
                 cmd_opt = [opt_path] + ["-Oz"] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return get_inst_count(after_ll_code)
+            return _count_or_fallback(after_ll_code, ir_code, pipeline)
         except subprocess.CalledProcessError as e:
+            _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code)
     elif opt_flags == []:
         return get_inst_count(ir_code)
@@ -116,6 +149,7 @@ def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
         try:
             result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return get_inst_count(after_ll_code)
+            return _count_or_fallback(after_ll_code, ir_code, pipeline)
         except subprocess.CalledProcessError as e:
+            _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code)
