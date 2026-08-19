@@ -38,7 +38,10 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 - Python 3.7+
 - pandas
-- LLVM 工具链 (默认为 LLVM 21，如需使用其他版本，可以自行更换工具链以及pass列表)
+- LLVM 工具链
+  - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可用 gen_passlist.py 生成）。
+  - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果一致，互不影响正确性。
+  - RuyiTuner 只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间。
 
 ## 使用方法
 
@@ -66,7 +69,7 @@ python3 train.py \
 
 **参数说明：**
 - `--dataset`: 包含 .ll 文件的数据集目录
-- `--llvm_tools_path`: LLVM工具链路径（包含opt、llc等工具）
+- `--llvm_tools_path`: LLVM工具链路径（包含opt）
 - `--output_dir`: 输出结果保存目录
 - `--passfile`: LLVM Pass列表文件
 - `--num_workers`: (可选) 并行处理的工作进程数，默认16
