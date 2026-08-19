@@ -13,11 +13,17 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ```
 ├── datasets/           # LLVM IR (.ll) 测试文件
-├── llvm_tools/         # LLVM工具链二进制文件
+├── lib/                # 预编译好的库目录
+│   ├── libAutophase_21_1_8.so         # 用于计算指令数量
 ├── output/             # 训练输出结果
 │   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对
 │   ├── Step2_FilterSynerPairs.csv     # 过滤后的协同Pass对
 │   ├── Step3_EnumeratedPairs.csv      # 枚举的所有协同对
+├── passes_examples/    # pass列表的一些示例文件
+│   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
+│   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
+│   ├── passes_2118-gen.txt            # 脚本gen_passlist.py筛选的LLVM 21.1.8版本的pass列表
+│   ├── passes_2210-gen.txt            # 脚本gen_passlist.py筛选的LLVM 22.1.0版本的pass列表
 ├── scripts/            # 主要执行脚本
 │   ├── train.py        # 训练脚本：发现协同Pass对
 │   └── run.py          # 运行脚本：使用GA优化代码
@@ -25,8 +31,9 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 │   ├── GA.py           # 遗传算法实现
 │   ├── PassSyner.py    # Pass协同效应分析
 │   └── common.py       # 公共工具函数
+├── gen_passlist.py     # 根据所使用的LLVM版本生成passes_XXX.txt的脚本
 |── README.md           # 项目说明文档
-|── passes_XXX.txt      # 可自定义的LLVM Pass列表(应与llvm二进制文件的版本对应,_后为版本号)
+|── passes_XXX.txt      # 可自定义的LLVM Pass列表,可以采用脚本自动生成或者自己编辑
 ```
 
 ## 环境要求
@@ -38,7 +45,15 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ## 使用方法
 
-### 1. 训练阶段：发现协同Pass对
+### 1. 准备阶段：生成passes_XXXX.txt
+
+passes_XXXX.txt文件，可以通过手动选择来构建，也可以使用gen_passlist.py脚本来自动生成。gen_passlist.py生成的pass列表会自动进行检查，是否可以被lib/libAutophase_21_1_8.so识别，避免在训练和优化阶段出现问题。
+
+```bash
+python gen_passlist.py --llvm_tools_path ../llvm_dir/build/bin --output passes_21.1.8.txt
+```
+
+### 2. 训练阶段：发现协同Pass对
 
 可自主添加LLVM Pass到 `passes_XXXX.txt` 文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
 
@@ -65,7 +80,7 @@ python3 train.py \
 - `Step2_FilterSynerPairs.csv`: 过滤空列表后的结果
 - `Step3_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
 
-### 2. 优化阶段：使用GA优化代码
+### 3. 优化阶段：使用GA优化代码
 
 使用训练得到的协同Pass对，通过遗传算法优化LLVM IR代码。
 
