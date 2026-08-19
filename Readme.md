@@ -109,3 +109,14 @@ python3 run.py \
 ### 1. 1.0版本位于分支v1.0上；
 
 ### 2. 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发。
+
+#### 1.1版本变更
+- datasets下的.ll测试文件，都是x86架构的，将它们移动到datasets/x86下；
+- 目前的passes.txt中的pass序列为LLVM21.1.8版本的，将passes.txt改为passes_21.1.8.txt，删除里边一些无法识别的pass和对缩减代码体积无益的stub类pass；添加LLVM22.1.0版本的pass序列文件passes_22.1.0.txt；
+- 增加了脚本gen_passlist.py，它可以根据所使用的LLVM版本生成passes_XXX.txt的脚本，这样使得ruyituner能被更多版本的LLVM来使用；经过测试，生成的pass列表更加完整和高效，会自动去除对代码体积无益的stub等pass；
+- 使用脚本gen_passlist.py生成了针对LLVM 21.1.8的passes_2118-gen.txt和针对LLVM 22.1.0的passes_2210-gen.txt；
+- 将所有passes_XXX.txt移动到新建目录passes_examples下；
+- 更新utils/common.py，增加了异常和错误处理代码，还增加了libAutophase处理前的准备代码，去除了一些libAutophase无法识别的LLVM22引入的新语法；
+- 根据上述变动，更新Readme文件；同时，更新Readme中一些与代码不符的内容；
+- v1.1版本发布于2026年8月19日。
+
