@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(current_file_path))
 sys.path.append(project_root)
 
 from utils.PassSyner import PassSyner
+from utils.common import get_inst_count_method
 
 
 args = ap.ArgumentParser()
@@ -24,6 +25,8 @@ args.add_argument("--passfile", type=str, required=True, help="the pass list to 
 args.add_argument("--isriscv", action='store_true', help="Whether the target architecture is RISC-V, which requires special handling in clang command")
 # Get the LLVM tools path from environment variables
 args = args.parse_args()
+
+print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
 
 """
 Step 1. Find synergistic pairs and save to CSV

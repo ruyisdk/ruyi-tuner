@@ -12,6 +12,7 @@ current_file_path = os.path.abspath(__file__)
 project_root = os.path.dirname(os.path.dirname(current_file_path))
 sys.path.append(project_root)
 from utils.GA import LeverageSyner_GA_codesize
+from utils.common import get_inst_count_method
 
 parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
@@ -20,6 +21,8 @@ parser.add_argument("--paircsv", type=str, required=True, help="the synergistic 
 parser.add_argument("--isriscv", action='store_true', help="Whether the target architecture is RISC-V, which requires special handling in clang command")
 
 args = parser.parse_args()
+
+print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
 
 df = pd.read_csv(args.paircsv)
 pairlist= df["synerpair"].tolist()

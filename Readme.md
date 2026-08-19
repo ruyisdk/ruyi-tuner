@@ -118,4 +118,7 @@ python3 run.py \
 - v1.1版本发布于2026年8月19日。
 
 #### 1.2版本变更
-- 更新utils/common.py：指令计数不再依赖lib/libAutophase_21_1_8.so,改为直接对IR文本统计，与InstCount/instcount pass口径一致，移除了ctypes加载代码和LLVM22新语法的预处理代码，也不再要求GLIBC_2.38；gen_passlist.py的解析检查相应改为用opt重新解析输出IR，并剔除输出为空模块(0条指令)的pass；
+- 指令计数不再依赖lib/libAutophase_21_1_8.so,改为直接使用opt对IR文本统计，移除了ctypes加载代码和LLVM22新语法的预处理代码，也不再要求GLIBC_2.38；这种方式解决了lib/libAutophase_21_1_8.so对LLVM版本限制较多的情况；
+- gen_passlist.py的解析检查相应改为用opt重新解析输出IR，并剔除输出为空模块(0条指令)的pass；
+- 增加了新的统计方式，使用opt instcount stats（-passes=instcount -stats，需LLVM_FORCE_ENABLE_STATS=ON构建）进行指令计数，并且优先使用这种方式，失败时自动回退文本统计；
+- run.py/train.py的输出信息中新增一行展示当前使用的指令计数方式（opt-stats或text）；

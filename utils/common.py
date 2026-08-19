@@ -10,20 +10,44 @@ sys.path.append(project_directory)
 # LLVM IR 文本排版规律: 标签在 0 列, 指令行固定缩进 2 列, switch 等续行缩进 4 列
 _INST_INDENT = 2
 
+# 预编译匹配`opt -passes=instcount -stats` 输出中的总指令数条目（例如:
+#   6 instcount - Number of instructions (of all types)）的正则表达式
+_STATS_TOTAL_INSTS_RE = re.compile(
+    r'^\s*(\d+)\s+instcount\s*-\s*Number of instructions \(of all types\)\s*$',
+    re.MULTILINE)
 
-def get_inst_count(ir_code):
-    '''统计 LLVM IR 文本中的总指令数, 等价于 LLVM InstCount/instcount pass 的 TotalInsts.
+# 已探测过的 opt 路径 -> 是否支持 -stats (None 不在缓存里表示未探测)
+_opt_stats_support = {}
 
-    不再依赖 lib/libAutophase_21_1_8.so (该 .so 由 LLVM 21.1.8 静态编译,
-    需要 GLIBC_2.38, 在旧系统上无法加载), 直接按 IR 文本的缩进规律统计指令行.
-    注意: 本机的 release 版 opt (ASSERTIONS=OFF) 无法用 `-passes=instcount -stats`
-    打印指令数, 因此选择文本统计实现, 任意 LLVM 版本/平台均可用且无需额外进程开销.
 
-    本函数只做计数不做合法性校验: opt 成功生成的输出必然是合法 IR; 被 module pass
-    清空的合法空模块(无 define/declare)返回 0, 不再误报.
-    '''
-    if not isinstance(ir_code, str):
-        raise RuntimeError('输入不是字符串, 无法统计指令数')
+def _opt_supports_stats(opt_path):
+    '''探测 opt 是否支持 `-passes=instcount -stats` (需要 LLVM_FORCE_ENABLE_STATS=ON 构建).
+
+    结果按 opt 路径缓存, 每个路径只探测一次; 普通 release 构建 (ASSERTIONS=OFF
+    且未开 LLVM_FORCE_ENABLE_STATS) 不会打印统计, 探测失败后永久走文本统计.'''
+    if opt_path in _opt_stats_support:
+        return _opt_stats_support[opt_path]
+    probe_ir = 'define i32 @__stats_probe() {\n  ret i32 0\n}\n'
+    r = subprocess.run([opt_path, '-passes=instcount', '-stats', '-disable-output', '-'],
+                       input=probe_ir, capture_output=True, text=True)
+    ok = (r.returncode == 0 and
+          _STATS_TOTAL_INSTS_RE.search(r.stdout + r.stderr) is not None)
+    _opt_stats_support[opt_path] = ok
+    return ok
+
+
+def _count_via_opt_stats(ir_code, opt_path):
+    '''用 `opt -passes=instcount -stats` 统计指令数; 失败(退出码非 0 或输出无统计行)返回 None.'''
+    r = subprocess.run([opt_path, '-passes=instcount', '-stats', '-disable-output', '-'],
+                       input=ir_code, capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    m = _STATS_TOTAL_INSTS_RE.search(r.stdout + r.stderr)
+    return int(m.group(1)) if m else None
+
+
+def _count_text(ir_code):
+    '''文本统计: 按 IR 缩进规律统计指令行, 空模块返回 0.'''
     count = 0
     for line in ir_code.splitlines():
         stripped = line.strip()
@@ -32,6 +56,38 @@ def get_inst_count(ir_code):
         if len(line) - len(line.lstrip()) == _INST_INDENT:
             count += 1
     return count
+
+
+def get_inst_count(ir_code, llvm_tools_path=None):
+    '''统计 LLVM IR 文本中的总指令数, 等价于 LLVM InstCount/instcount pass 的 TotalInsts.
+
+    优先使用 `opt -passes=instcount -stats` (需要 LLVM_FORCE_ENABLE_STATS=ON 构建的
+    opt); 该方式不可用(opt 不存在/不支持 stats/运行失败或输出无统计行)时回退到按 IR
+    文本缩进规律的文本统计.
+
+    两种方式都只做计数不做合法性校验: opt 成功生成的输出必然是合法 IR; 被 module
+    pass 清空的合法空模块(无 define/declare)返回 0.
+    '''
+    if not isinstance(ir_code, str):
+        raise RuntimeError('输入不是字符串, 无法统计指令数')
+    if llvm_tools_path:
+        opt_path = os.path.join(llvm_tools_path, 'opt')
+        if os.path.isfile(opt_path) and _opt_supports_stats(opt_path):
+            count = _count_via_opt_stats(ir_code, opt_path)
+            if count is not None:
+                return count
+    return _count_text(ir_code)
+
+
+def get_inst_count_method(llvm_tools_path=None):
+    '''返回当前会使用的指令计数方式: 'opt-stats' 或 'text'.
+
+    与 get_inst_count 的决策逻辑一致, 供脚本在输出信息中展示计数方式.'''
+    if llvm_tools_path:
+        opt_path = os.path.join(llvm_tools_path, 'opt')
+        if os.path.isfile(opt_path) and _opt_supports_stats(opt_path):
+            return 'opt-stats'
+    return 'text'
 
 def fix_loop_nesting(pipeline: str) -> str:
     '''
@@ -109,15 +165,6 @@ def _report_opt_failure(pipeline, stderr_text):
     print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
 
 
-def _count_or_fallback(ir_code, fallback_ir_code, pipeline):
-    '''统计优化后 IR 的指令数; 若 IR 文本无效则回退到输入 IR 的指令数并打印警告'''
-    try:
-        return get_inst_count(ir_code)
-    except RuntimeError as e:
-        print(f'[count failed] passes="{pipeline}": {e}; using input IR count', file=sys.stderr)
-        return get_inst_count(fallback_ir_code)
-
-
 def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
 
     pipeline = ",".join(opt_flags)
@@ -136,19 +183,19 @@ def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
                 cmd_opt = [opt_path] + ["-Oz"] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return _count_or_fallback(after_ll_code, ir_code, pipeline)
+            return get_inst_count(after_ll_code, llvm_tools_path)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
-            return get_inst_count(ir_code)
+            return get_inst_count(ir_code, llvm_tools_path)
     elif opt_flags == []:
-        return get_inst_count(ir_code)
+        return get_inst_count(ir_code, llvm_tools_path)
     else:
         pipeline = fix_loop_nesting(pipeline)
         cmd_opt = f'{opt_path} -S "-passes={pipeline}"'
         try:
             result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return _count_or_fallback(after_ll_code, ir_code, pipeline)
+            return get_inst_count(after_ll_code, llvm_tools_path)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
-            return get_inst_count(ir_code)
+            return get_inst_count(ir_code, llvm_tools_path)
