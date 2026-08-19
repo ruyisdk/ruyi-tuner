@@ -125,3 +125,4 @@ python3 run.py \
 - gen_passlist.py的解析检查相应改为用opt重新解析输出IR，并剔除输出为空模块(0条指令)的pass；
 - 增加了新的统计方式，使用opt instcount stats（-passes=instcount -stats，需LLVM_FORCE_ENABLE_STATS=ON构建）进行指令计数，并且优先使用这种方式，失败时自动回退文本统计；
 - run.py/train.py的输出信息中新增一行展示当前使用的指令计数方式（opt-stats或text）；
+- 更新Readme中`环境要求`部分的 `LLVM 工具链`的内容。
