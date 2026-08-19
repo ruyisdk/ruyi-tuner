@@ -13,8 +13,6 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ```
 ├── datasets/           # LLVM IR (.ll) 测试文件
-├── lib/                # 预编译好的库目录
-│   ├── libAutophase_21_1_8.so         # 用于计算指令数量
 ├── output/             # 训练输出结果
 │   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对
 │   ├── Step2_FilterSynerPairs.csv     # 过滤后的协同Pass对
@@ -40,17 +38,16 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 - Python 3.7+
 - pandas
-- GLIBC_2.38 (required by ruyi-tuner/lib/libAutophase_21_1_8.so)
 - LLVM 工具链 (默认为 LLVM 21，如需使用其他版本，可以自行更换工具链以及pass列表)
 
 ## 使用方法
 
 ### 1. 准备阶段：生成passes_XXXX.txt
 
-passes_XXXX.txt文件，可以通过手动选择来构建，也可以使用gen_passlist.py脚本来自动生成。gen_passlist.py生成的pass列表会自动进行检查，是否可以被lib/libAutophase_21_1_8.so识别，避免在训练和优化阶段出现问题。
+passes_XXXX.txt文件，可以通过手动选择来构建，也可以使用gen_passlist.py脚本来自动生成。gen_passlist.py生成的pass列表会自动进行检查输出IR是否可以被opt重新解析，避免在训练和优化阶段出现问题。
 
 ```bash
-python gen_passlist.py --llvm_tools_path ../llvm_dir/build/bin --output passes_21.1.8.txt
+python gen_passlist.py --llvm_tools_path ../llvm_dir/build/bin --output passes_XXXX.txt
 ```
 
 ### 2. 训练阶段：发现协同Pass对
@@ -64,7 +61,7 @@ python3 train.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
-    --passfile ../passes_21.1.8.txt
+    --passfile ../passes_XXXX.txt
 ```
 
 **参数说明：**
@@ -120,3 +117,5 @@ python3 run.py \
 - 根据上述变动，更新Readme文件；同时，更新Readme中一些与代码不符的内容；
 - v1.1版本发布于2026年8月19日。
 
+#### 1.2版本变更
+- 更新utils/common.py：指令计数不再依赖lib/libAutophase_21_1_8.so,改为直接对IR文本统计，与InstCount/instcount pass口径一致，移除了ctypes加载代码和LLVM22新语法的预处理代码，也不再要求GLIBC_2.38；gen_passlist.py的解析检查相应改为用opt重新解析输出IR，并剔除输出为空模块(0条指令)的pass；

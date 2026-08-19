@@ -8,7 +8,8 @@
   2. 用 `opt --print-passes` 读取该版本注册的全部 module/cgscc/function/loop pass
   3. 用一个包含函数/循环/内存操作的测试 IR 逐个运行验证, 剔除运行失败的 pass
      (unknown pass、requires TargetMachine、段错误、必然失败的调试 pass 等)
-  4. 若 libAutophase 可用, 再剔除输出 IR 无法被它解析的 pass
+  4. 再用 opt 重新解析每个 pass 的输出 IR, 剔除输出无法被 opt 解析、
+     或把整个模块清空(0 条指令)的 pass
   5. 输出自定义的名字的pass列表文件
 
 用法:
@@ -24,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
+
+from utils.common import get_inst_count
 
 # 用于运行时验证的测试 IR: 包含函数、调用、循环、内存读写, 能覆盖绝大多数 pass 的使用场景
 TEST_IR = """\
@@ -145,16 +148,17 @@ def extract_error_reason(stderr_text):
     return None
 
 
-def try_autophase_loader():
-    """尝试加载 libAutophase; 成功返回 get_inst_count, 失败返回 None"""
-    try:
-        from utils.common import get_inst_count
-        get_inst_count(TEST_IR)
-        return get_inst_count
-    except (OSError, ImportError, RuntimeError) as e:
-        print(f'[warning] libAutophase 不可用 ({type(e).__name__}), 跳过解析检查; '
-              f'如需完整检查请用 ./run_python239.sh 运行本脚本', file=sys.stderr)
-        return None
+def parse_check(opt_path, ir):
+    """用 opt 重新解析 IR, 返回 (ok, reason).
+
+    替代原来的 libAutophase 解析检查: 训练/优化时输出 IR 会被同版本的 opt
+    再次处理, 因此只需保证输出 IR 能被 opt 解析即可. """
+    r = subprocess.run([opt_path, '-disable-output', '-'],
+                       input=ir, capture_output=True, text=True)
+    if r.returncode == 0:
+        return True, None
+    reason = extract_error_reason(r.stderr) or f'exit code {r.returncode}'
+    return False, reason
 
 
 def main():
@@ -164,8 +168,8 @@ def main():
                         help='opt 所在目录 (与 train.py/run.py 的 --llvm_tools_path 相同)')
     parser.add_argument('--output', type=str, default=None,
                         help='输出文件路径, 默认输出到当前目录下 passes_<版本号>.txt')
-    parser.add_argument('--no-autophase-check', action='store_true',
-                        help='不做 libAutophase 解析检查 (只做 opt 运行检查)')
+    parser.add_argument('--no-parse-check', action='store_true',
+                        help='不做输出 IR 的 opt 解析检查')
     parser.add_argument('--keep-instrumentation', action='store_true',
                         help='保留插桩类 pass (asan/tsan/pgo-* 等, 默认剔除)')
     parser.add_argument('--extra-exclude', type=str, default=None,
@@ -210,30 +214,30 @@ def main():
             else:
                 dropped.append((name, reason))
 
-    # Step 2: libAutophase 解析验证
-    autophase_dropped = []
-    if not args.no_autophase_check:
-        get_inst_count = try_autophase_loader()
-        if get_inst_count is not None:
-            print('正在进行 libAutophase 解析验证...')
+    # Step 2: 输出 IR 可解析性验证 (原 libAutophase 解析检查的替代)
+    parse_dropped = []
+    if not args.no_parse_check:
+        print('正在进行输出 IR 可解析性验证...')
 
-            def check_parse(item):
-                cat, name, ir = item
-                try:
-                    get_inst_count(ir)
-                    return name, True, None
-                except RuntimeError:
-                    return name, False, 'libAutophase 无法解析输出 IR'
+        def check_parse(item):
+            cat, name, ir = item
+            ok, reason = parse_check(opt_path, ir)
+            if not ok:
+                return name, False, reason
+            # 剔除把整个模块清空的 pass: 它们会让 GA 得到 0 指令的"满分"而被滥用
+            if get_inst_count(ir) == 0:
+                return name, False, '输出 IR 为空模块 (0 条指令)'
+            return name, True, None
 
-            with ThreadPoolExecutor(max_workers=args.workers) as ex:
-                results = ex.map(check_parse, kept)
-                kept_names = []
-                for name, ok, reason in results:
-                    if ok:
-                        kept_names.append(name)
-                    else:
-                        autophase_dropped.append((name, reason))
-                kept = [item for item in kept if item[1] in kept_names]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = ex.map(check_parse, kept)
+            kept_names = []
+            for name, ok, reason in results:
+                if ok:
+                    kept_names.append(name)
+                else:
+                    parse_dropped.append((name, reason))
+            kept = [item for item in kept if item[1] in kept_names]
 
     kept_names = {name for _, name, _ in kept}
     out_path = args.output or f'passes_{re.sub(r"[^A-Za-z0-9._-]", "_", version)}.txt'
@@ -250,9 +254,9 @@ def main():
         print(f'\n因 opt 运行失败剔除 {len(dropped)} 个:')
         for name, reason in dropped:
             print(f'  - {name}: {reason}')
-    if autophase_dropped:
-        print(f'\n因 libAutophase 解析失败剔除 {len(autophase_dropped)} 个:')
-        for name, reason in autophase_dropped:
+    if parse_dropped:
+        print(f'\n因输出 IR 检查失败剔除 {len(parse_dropped)} 个:')
+        for name, reason in parse_dropped:
             print(f'  - {name}: {reason}')
     print('\n成功生成pass列表文件！')
 

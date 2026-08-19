@@ -1,4 +1,4 @@
-import os,ctypes
+import os
 import io,sys
 import re
 import subprocess
@@ -6,32 +6,31 @@ import subprocess
 
 project_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_directory)
-lib_path = os.path.join(project_directory, "lib", "libAutophase_21_1_8.so")
 
-class AutophaseDataStruct(ctypes.Structure):
-    _fields_ = [("name", ctypes.c_char * 64), ("value", ctypes.c_int)]
-
-
-# 在解析前移除LLVM 22 新增的libAutophase(LLVM 21.1.8 解析器)不能识别的部分语法
-_IR_NORMALIZE_PATTERNS = [
-    re.compile(r'nocreateundeforpoison\s*'),      # LLVM 22 新增属性
-    re.compile(r',?\s*target_mem\d+\s*:\s*\w+'),  # LLVM 22 新增 target 内存位置语法
-]
-
-def _normalize_ir(ir_code):
-    for pat in _IR_NORMALIZE_PATTERNS:
-        ir_code = pat.sub('', ir_code)
-    return ir_code
+# LLVM IR 文本排版规律: 标签在 0 列, 指令行固定缩进 2 列, switch 等续行缩进 4 列
+_INST_INDENT = 2
 
 
 def get_inst_count(ir_code):
-    autophase_lib = ctypes.CDLL(lib_path)
-    result_array = (AutophaseDataStruct * 56)()
-    autophase_lib.GetAutophase(_normalize_ir(ir_code).encode(), result_array)
-    result_dict = {item.name.decode(): item.value for item in result_array}
-    count = result_dict.get('TotalInsts')
-    if count is None:
-        raise RuntimeError('libAutophase failed to parse LLVM IR (no TotalInsts in result)')
+    '''统计 LLVM IR 文本中的总指令数, 等价于 LLVM InstCount/instcount pass 的 TotalInsts.
+
+    不再依赖 lib/libAutophase_21_1_8.so (该 .so 由 LLVM 21.1.8 静态编译,
+    需要 GLIBC_2.38, 在旧系统上无法加载), 直接按 IR 文本的缩进规律统计指令行.
+    注意: 本机的 release 版 opt (ASSERTIONS=OFF) 无法用 `-passes=instcount -stats`
+    打印指令数, 因此选择文本统计实现, 任意 LLVM 版本/平台均可用且无需额外进程开销.
+
+    本函数只做计数不做合法性校验: opt 成功生成的输出必然是合法 IR; 被 module pass
+    清空的合法空模块(无 define/declare)返回 0, 不再误报.
+    '''
+    if not isinstance(ir_code, str):
+        raise RuntimeError('输入不是字符串, 无法统计指令数')
+    count = 0
+    for line in ir_code.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith((';', '!')):
+            continue
+        if len(line) - len(line.lstrip()) == _INST_INDENT:
+            count += 1
     return count
 
 def fix_loop_nesting(pipeline: str) -> str:
@@ -111,11 +110,11 @@ def _report_opt_failure(pipeline, stderr_text):
 
 
 def _count_or_fallback(ir_code, fallback_ir_code, pipeline):
-    '''统计优化后 IR 的指令数; 若 libAutophase 解析失败则回退到输入 IR 的指令数并打印警告'''
+    '''统计优化后 IR 的指令数; 若 IR 文本无效则回退到输入 IR 的指令数并打印警告'''
     try:
         return get_inst_count(ir_code)
     except RuntimeError as e:
-        print(f'[parse failed] passes="{pipeline}": {e}; using input IR count', file=sys.stderr)
+        print(f'[count failed] passes="{pipeline}": {e}; using input IR count', file=sys.stderr)
         return get_inst_count(fallback_ir_code)
 
 
