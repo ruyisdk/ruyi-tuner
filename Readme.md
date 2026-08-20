@@ -22,6 +22,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
 │   ├── passes_2118-gen.txt            # 自动生成的LLVM 21.1.8版本的pass列表
 │   ├── passes_2210-gen.txt            # 自动生成的LLVM 22.1.0版本的pass列表
+├── ruyituner.py        # 一键入口：依次执行训练(train.py)与优化(run.py)
 ├── scripts/            # 主要执行脚本
 │   ├── train.py        # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   └── run.py          # 运行脚本：使用GA优化代码
@@ -44,7 +45,42 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 
 ## 使用方法
 
-### 1. 训练阶段：生成pass列表并发现协同Pass对
+### 1. 一键完成训练与优化（ruyituner.py）
+
+ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。
+
+```bash
+# 完整流程：训练 → 用训练得到的协同Pass对做GA优化
+python3 ruyituner.py \
+    --dataset ../datasets/x86 \
+    --llvm_tools_path ../llvm_dir/build/bin
+
+# 仅训练，不优化
+python3 ruyituner.py \
+    --dataset ../datasets/x86 \
+    --llvm_tools_path ../llvm_dir/build/bin \
+    --only_train
+
+# 仅优化（复用已有的Step3_EnumeratedPairs.csv）
+python3 ruyituner.py \
+    --dataset ../datasets/x86 \
+    --llvm_tools_path ../llvm_dir/build/bin \
+    --only_run \
+    --paircsv ../output/Step3_EnumeratedPairs.csv
+```
+
+**参数说明：**
+- `--dataset`: 包含 .ll 文件的数据集目录（必选，训练与优化共用）
+- `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
+- `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
+- `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
+- `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step3_EnumeratedPairs.csv`
+- `--num_workers`: (可选) 训练并行线程数，默认16
+- `--isriscv`: (可选) 是否针对RISC-V架构
+- `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
+- `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
+
+### 2. 训练阶段：生成pass列表并发现协同Pass对
 
 训练需要一份与所使用LLVM版本匹配的pass列表（passes_XXXX.txt），可以手动选择构建，也可以由train.py自动生成；自动生成的pass列表会检查输出IR是否可以被opt重新解析，剔除不可用的pass，避免在训练和优化阶段出现问题。可自主添加LLVM Pass到passes_XXXX.txt文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
 
@@ -59,7 +95,7 @@ python3 train.py \
     --output_dir ../output \
     --passfile ../passes_XXXX.txt
 
-# 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略；pass列表默认不写文件，除非指定--passlist_output）
+# 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略,默认使用项目根目录下的output/；pass列表默认不写文件，除非指定--passlist_output）
 python3 train.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
@@ -90,7 +126,7 @@ python3 train.py \
 - `Step2_FilterSynerPairs.csv`: 过滤空列表后的结果
 - `Step3_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
 
-### 2. 优化阶段：使用GA优化代码
+### 3. 优化阶段：使用GA优化代码
 
 使用训练得到的协同Pass对，通过遗传算法优化LLVM IR代码。
 
@@ -143,4 +179,5 @@ python3 run.py \
 - 新增--gen_passlist_only参数：仅生成pass列表并退出，不进行训练（该模式下--dataset可不提供）；
 - train.py的--output_dir参数改为可选：未指定时自动创建并使用项目根目录下的output目录，并输出提示信息（训练示例注释同步说明--output_dir可省略）；
 - 新增pass列表生成相关参数：--passlist_output（指定生成文件路径）、--no_parse_check（跳过输出IR解析检查）、--keep_instrumentation（保留插桩类pass）、--extra_exclude（额外排除规则）；
+- 新增ruyituner.py入口脚本，一次调用依次完成训练(train.py)与优化(run.py)两个阶段，支持--only_train/--only_run单独执行；
 - 根据上述修改，更新Readme，包含合并`使用方法`部分的`准备阶段`与`训练阶段`，更新参数列表等内容。
