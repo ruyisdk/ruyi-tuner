@@ -5,8 +5,8 @@
 训练脚本 (含 pass 列表自动生成).
 
 用法:
-  # 原有训练流程 (--dataset/--output_dir 必选)
-  python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> --output_dir <dir> --passfile <file>
+  # 训练流程 (--dataset 必选; --output_dir 可选, 缺省为项目根目录下的 output/)
+  python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> [--output_dir <dir>] --passfile <file>
 
   # 未提供 --passfile 时自动生成 pass 列表后开始训练
   python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> --output_dir <dir>
@@ -257,14 +257,14 @@ def generate_passlist(args):
     return out_path
 
 
-# 仅生成 pass 列表时不做训练, 此时 --dataset/--output_dir 不要求必选
-# (训练模式下仍为必选项)
+# 仅生成 pass 列表时不做训练, 此时 --dataset 不要求必选
+# (训练模式下 --dataset 仍为必选项)
 gen_only = '--gen_passlist_only' in sys.argv
 
 args = ap.ArgumentParser()
 args.add_argument("--dataset", type=str, required=not gen_only, help="Dataset path for training containing .ll files (required for training)")
 args.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
-args.add_argument("--output_dir", type=str, required=not gen_only, help="output file path (required for training)")
+args.add_argument("--output_dir", type=str, default=None, help="output file path; if not provided, defaults to <project_root>/output and is created automatically")
 args.add_argument("--num_workers", type=int, default=16, help="number of workers for parallel processing")
 args.add_argument("--passfile", type=str, default=None, help="the pass list to be used for synergistic pair finding, e.g., llvm21_1_8 or llvm18_1_6; if not provided, it will be automatically generated")
 args.add_argument("--isriscv", action='store_true', help="Whether the target architecture is RISC-V, which requires special handling in clang command")
@@ -279,6 +279,12 @@ if args.gen_passlist_only:
     # 仅生成 pass 列表, 不训练
     generate_passlist(args)
     sys.exit(0)
+
+if args.output_dir is None:
+    # 未指定 --output_dir 时, 使用并自动创建项目根目录下的 output 目录
+    args.output_dir = os.path.join(project_root, 'output')
+    os.makedirs(args.output_dir, exist_ok=True)
+    print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
 if not args.passfile:
     # 未提供 --passfile 时自动生成 pass 列表, 然后继续训练
