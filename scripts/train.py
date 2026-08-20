@@ -8,7 +8,7 @@
   # 训练流程 (--dataset 必选; --output_dir 可选, 缺省为项目根目录下的 output/)
   python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> [--output_dir <dir>] --passfile <file>
 
-  # 未提供 --passfile 时自动生成 pass 列表后开始训练
+  # 未提供 --passfile 时自动生成 pass 列表后开始训练 (默认不写txt文件, 除非指定 --passlist_output)
   python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> --output_dir <dir>
 
   # 仅生成 pass 列表, 不训练 (此时 --dataset/--output_dir 可不提供)
@@ -171,8 +171,12 @@ def parse_check(opt_path, ir):
     return False, reason
 
 
-def generate_passlist(args):
-    """根据命令行参数生成 pass 列表文件, 返回输出文件路径."""
+def generate_passlist(args, write_default=True):
+    """生成 pass 列表, 返回 pass 行列表.
+
+    - --passlist_output 指定时写入该文件;
+    - 未指定时: write_default=True(仅生成模式)写入默认文件 passes_<版本>.txt,
+      write_default=False(训练模式)不写文件, 直接返回列表供训练使用."""
     opt_path = os.path.join(args.llvm_tools_path, 'opt')
     if not os.path.isfile(opt_path):
         raise SystemExit(f'找不到 opt 二进制: {opt_path}')
@@ -235,16 +239,27 @@ def generate_passlist(args):
             kept = [item for item in kept if item[1] in kept_names]
 
     kept_names = {name for _, name, _ in kept}
-    out_path = args.passlist_output or f'passes_{re.sub(r"[^A-Za-z0-9._-]", "_", version)}.txt'
-    line_count = 0
-    with open(out_path, 'w') as f:
-        for cat in ('module', 'cgscc', 'function', 'loop'):
-            for name in registered.get(cat, []):
-                if name in kept_names:
-                    f.write(f'{cat}({name})\n')
-                    line_count += 1
+    if args.passlist_output is not None:
+        out_path = args.passlist_output
+    elif write_default:
+        out_path = f'passes_{re.sub(r"[^A-Za-z0-9._-]", "_", version)}.txt'
+    else:
+        out_path = None
 
-    print(f'\n生成完成: {out_path} (共 {line_count} 个 pass)')
+    lines = []
+    for cat in ('module', 'cgscc', 'function', 'loop'):
+        for name in registered.get(cat, []):
+            if name in kept_names:
+                lines.append(f'{cat}({name})')
+
+    if out_path is not None:
+        with open(out_path, 'w') as f:
+            f.write('\n'.join(lines) + ('\n' if lines else ''))
+
+    if out_path is not None:
+        print(f'\n生成完成: {out_path} (共 {len(lines)} 个 pass)')
+    else:
+        print(f'\n生成完成: 共 {len(lines)} 个 pass (未写文件, 仅用于本次训练)')
     if dropped:
         print(f'\n因 opt 运行失败剔除 {len(dropped)} 个:')
         for name, reason in dropped:
@@ -253,8 +268,8 @@ def generate_passlist(args):
         print(f'\n因输出 IR 检查失败剔除 {len(parse_dropped)} 个:')
         for name, reason in parse_dropped:
             print(f'  - {name}: {reason}')
-    print('\n成功生成pass列表文件！')
-    return out_path
+    print('\n成功生成pass列表！')
+    return lines
 
 
 # 仅生成 pass 列表时不做训练, 此时 --dataset 不要求必选
@@ -286,21 +301,20 @@ if args.output_dir is None:
     os.makedirs(args.output_dir, exist_ok=True)
     print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
-if not args.passfile:
-    # 未提供 --passfile 时自动生成 pass 列表, 然后继续训练
-    args.passfile = generate_passlist(args)
-
 print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
 
 """
 Step 1. Find synergistic pairs and save to CSV
 """
 
-if not os.path.exists(args.passfile):
-    raise FileNotFoundError(f"Pass file {args.passfile} does not exist.")
-else:
+if args.passfile:
+    if not os.path.exists(args.passfile):
+        raise FileNotFoundError(f"Pass file {args.passfile} does not exist.")
     with open(args.passfile, 'r') as f:
         passlist = [line.strip() for line in f if line.strip()]
+else:
+    # 未提供 --passfile 时自动生成 pass 列表(默认不写文件), 然后继续训练
+    passlist = generate_passlist(args, write_default=False)
 
 syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, isriscv=args.isriscv, num_works=args.num_workers)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')

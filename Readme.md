@@ -59,7 +59,7 @@ python3 train.py \
     --output_dir ../output \
     --passfile ../passes_XXXX.txt
 
-# 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略，默认使用项目根目录下的output/）
+# 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略；pass列表默认不写文件，除非指定--passlist_output）
 python3 train.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
@@ -76,9 +76,9 @@ python3 train.py \
 - `--dataset`: 包含 .ll 文件的数据集目录（必选）
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 输出结果保存目录；未指定时自动创建并使用项目根目录下的output目录
-- `--passfile`: (可选) LLVM Pass列表文件；不提供时自动生成与LLVM版本匹配的pass列表
+- `--passfile`: (可选) LLVM Pass列表文件；不提供时自动生成与LLVM版本匹配的pass列表（默认不写文件）
 - `--gen_passlist_only`: (可选) 仅生成pass列表并退出，不训练；该模式下--dataset/--output_dir可不提供
-- `--passlist_output`: (可选) 自动生成pass列表的输出路径，默认passes_<LLVM版本号>.txt
+- `--passlist_output`: (可选) 指定时把自动生成的pass列表写入该文件；仅生成模式(--gen_passlist_only)未指定时默认写passes_<LLVM版本号>.txt
 - `--no_parse_check`: (可选) 跳过输出IR的opt解析检查
 - `--keep_instrumentation`: (可选) 保留插桩类pass（asan/tsan/pgo-*等，默认剔除）
 - `--extra_exclude`: (可选) 额外的pass排除规则（正则表达式）
@@ -139,7 +139,7 @@ python3 run.py \
 
 #### 1.3版本变更
 - 将gen_passlist.py的功能合并进scripts/train.py并删除原脚本，pass列表生成与训练由同一脚本完成；
-- train.py的--passfile参数改为可选：提供时直接使用，不提供时自动生成与--llvm_tools_path匹配的pass列表后再训练；
+- train.py的--passfile参数改为可选：提供时直接使用，不提供时自动生成与--llvm_tools_path匹配的pass列表后再训练（默认不写文件，除非指定--passlist_output）；
 - 新增--gen_passlist_only参数：仅生成pass列表并退出，不进行训练（该模式下--dataset可不提供）；
 - train.py的--output_dir参数改为可选：未指定时自动创建并使用项目根目录下的output目录，并输出提示信息（训练示例注释同步说明--output_dir可省略）；
 - 新增pass列表生成相关参数：--passlist_output（指定生成文件路径）、--no_parse_check（跳过输出IR解析检查）、--keep_instrumentation（保留插桩类pass）、--extra_exclude（额外排除规则）；
