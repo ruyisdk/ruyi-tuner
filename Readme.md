@@ -20,16 +20,15 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
-│   ├── passes_2118-gen.txt            # 脚本gen_passlist.py筛选的LLVM 21.1.8版本的pass列表
-│   ├── passes_2210-gen.txt            # 脚本gen_passlist.py筛选的LLVM 22.1.0版本的pass列表
+│   ├── passes_2118-gen.txt            # 自动生成的LLVM 21.1.8版本的pass列表
+│   ├── passes_2210-gen.txt            # 自动生成的LLVM 22.1.0版本的pass列表
 ├── scripts/            # 主要执行脚本
-│   ├── train.py        # 训练脚本：发现协同Pass对
+│   ├── train.py        # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   └── run.py          # 运行脚本：使用GA优化代码
 ├── utils/              # 工具模块
 │   ├── GA.py           # 遗传算法实现
 │   ├── PassSyner.py    # Pass协同效应分析
 │   └── common.py       # 公共工具函数
-├── gen_passlist.py     # 根据所使用的LLVM版本生成passes_XXX.txt的脚本
 |── README.md           # 项目说明文档
 |── passes_XXX.txt      # 可自定义的LLVM Pass列表,可以采用脚本自动生成或者自己编辑
 ```
@@ -39,39 +38,50 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 - Python 3.7+
 - pandas
 - LLVM 工具链
-  - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可用 gen_passlist.py 生成）。
+  - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
   - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果一致，互不影响正确性。
   - RuyiTuner 只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间。
 
 ## 使用方法
 
-### 1. 准备阶段：生成passes_XXXX.txt
+### 1. 训练阶段：生成pass列表并发现协同Pass对
 
-passes_XXXX.txt文件，可以通过手动选择来构建，也可以使用gen_passlist.py脚本来自动生成。gen_passlist.py生成的pass列表会自动进行检查输出IR是否可以被opt重新解析，避免在训练和优化阶段出现问题。
-
-```bash
-python gen_passlist.py --llvm_tools_path ../llvm_dir/build/bin --output passes_XXXX.txt
-```
-
-### 2. 训练阶段：发现协同Pass对
-
-可自主添加LLVM Pass到 `passes_XXXX.txt` 文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
+训练需要一份与所使用LLVM版本匹配的pass列表（passes_XXXX.txt），可以手动选择构建，也可以由train.py自动生成；自动生成的pass列表会检查输出IR是否可以被opt重新解析，剔除不可用的pass，避免在训练和优化阶段出现问题。可自主添加LLVM Pass到passes_XXXX.txt文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
 
 ```bash
 mkdir -p output
 cd scripts
+
+# 手动指定pass列表进行训练
 python3 train.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
     --passfile ../passes_XXXX.txt
+
+# 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练
+python3 train.py \
+    --dataset ../datasets/x86 \
+    --llvm_tools_path ../llvm_dir/build/bin \
+    --output_dir ../output
+
+# 仅生成pass列表，不训练
+python3 train.py \
+    --gen_passlist_only \
+    --llvm_tools_path ../llvm_dir/build/bin \
+    --passlist_output ../passes_XXXX.txt
 ```
 
 **参数说明：**
-- `--dataset`: 包含 .ll 文件的数据集目录
-- `--llvm_tools_path`: LLVM工具链路径（包含opt）
-- `--output_dir`: 输出结果保存目录
-- `--passfile`: LLVM Pass列表文件
+- `--dataset`: 包含 .ll 文件的数据集目录（必选）
+- `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
+- `--output_dir`: 输出结果保存目录（必选）
+- `--passfile`: (可选) LLVM Pass列表文件；不提供时自动生成与LLVM版本匹配的pass列表
+- `--gen_passlist_only`: (可选) 仅生成pass列表并退出，不训练；该模式下--dataset/--output_dir可不提供
+- `--passlist_output`: (可选) 自动生成pass列表的输出路径，默认passes_<LLVM版本号>.txt
+- `--no_parse_check`: (可选) 跳过输出IR的opt解析检查
+- `--keep_instrumentation`: (可选) 保留插桩类pass（asan/tsan/pgo-*等，默认剔除）
+- `--extra_exclude`: (可选) 额外的pass排除规则（正则表达式）
 - `--num_workers`: (可选) 并行处理的工作进程数，默认16
 - `--isriscv`: (可选) 是否是针对RISC-V架构的代码优化
 
@@ -80,7 +90,7 @@ python3 train.py \
 - `Step2_FilterSynerPairs.csv`: 过滤空列表后的结果
 - `Step3_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
 
-### 3. 优化阶段：使用GA优化代码
+### 2. 优化阶段：使用GA优化代码
 
 使用训练得到的协同Pass对，通过遗传算法优化LLVM IR代码。
 
@@ -126,3 +136,10 @@ python3 run.py \
 - 增加了新的统计方式，使用opt instcount stats（-passes=instcount -stats，需LLVM_FORCE_ENABLE_STATS=ON构建）进行指令计数，并且优先使用这种方式，失败时自动回退文本统计；
 - run.py/train.py的输出信息中新增一行展示当前使用的指令计数方式（opt-stats或text）；
 - 更新Readme中`环境要求`部分的 `LLVM 工具链`的内容。
+
+#### 1.3版本变更
+- 将gen_passlist.py的功能合并进scripts/train.py并删除原脚本，pass列表生成与训练由同一脚本完成；
+- train.py的--passfile参数改为可选：提供时直接使用，不提供时自动生成与--llvm_tools_path匹配的pass列表后再训练；
+- 新增--gen_passlist_only参数：仅生成pass列表并退出，不进行训练（该模式下--dataset/--output_dir可不提供）；
+- 新增pass列表生成相关参数：--passlist_output（指定生成文件路径）、--no_parse_check（跳过输出IR解析检查）、--keep_instrumentation（保留插桩类pass）、--extra_exclude（额外排除规则）；
+- 更新Readme的`使用方法`部分，合并准备阶段与训练阶段。
