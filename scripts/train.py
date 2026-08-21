@@ -22,7 +22,6 @@ import subprocess
 import argparse as ap
 import csv
 import ast
-import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 # Get the absolute path of the current file
@@ -306,7 +305,8 @@ if args.output_dir is None:
 print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
 
 """
-Step 1. Find synergistic pairs and save to CSV
+Step 1. Find synergistic pairs and save to Step1 CSV
+(空列表行在写入时直接跳过)
 """
 
 if args.passfile:
@@ -320,30 +320,14 @@ else:
 
 syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, isriscv=args.isriscv, num_works=args.num_workers)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
-if not os.path.exists(output_file):
-    with open(output_file, 'w') as f:
-        pass
-    print("Created output file:", output_file)
 syner.FindSynerPasses(output_file)
-print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv")
+print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv (rows with empty lists are skipped)")
 
 """
-Step 2. Remove rows with empty lists and save to a new CSV
+Step 2. Enumerate synergistic pairs and save to a new CSV
 """
-output = os.path.join(args.output_dir, 'Step2_FilterSynerPairs.csv')
-df = pd.read_csv(output_file)
-# Remove rows where the Synerpairlist column is an empty list
-df = df[df['Synerpairlist'].apply(lambda x: x != '[]')]
-
-# Save the processed CSV file
-df.to_csv(output, index=False)
-print("Rows with empty lists have been successfully removed and saved to Step2_FilterSynerPairs.csv")
-
-"""
-Step 3. Enumerate synergistic pairs and save to a new CSV
-"""
-input_path = os.path.join(args.output_dir, 'Step2_FilterSynerPairs.csv')
-output_path = os.path.join(args.output_dir, 'Step3_EnumeratedPairs.csv')
+input_path = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
+output_path = os.path.join(args.output_dir, 'Step2_EnumeratedPairs.csv')
 
 syner_list = []
 # Open the original CSV file
@@ -373,4 +357,4 @@ with open(input_path, mode='r', encoding='utf-8') as file:
                     seen_elements.add(element)
                     index_counter += 1
     
-print("Step3 Completed: Enumeration completed and saved to Step3_EnumeratedPairs.csv")
+print("Step2 Completed: Enumeration completed and saved to Step2_EnumeratedPairs.csv")

@@ -4,7 +4,7 @@
 ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
 
 默认流程:
-  1. 训练:  运行 scripts/train.py, 输出 Step3_EnumeratedPairs.csv;
+  1. 训练:  运行 scripts/train.py, 输出 Step1_FindSynerPairs.csv 与 Step2_EnumeratedPairs.csv;
   2. 优化:  用训练得到的协同 pass 对运行 scripts/run.py 进行 GA 优化.
 
 用法示例:
@@ -14,9 +14,9 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
   # 仅训练 (不优化)
   python3 ruyituner.py --dataset datasets/x86 --llvm_tools_path ../llvm_dir/build/bin --only_train
 
-  # 仅优化 (需要已有 Step3_EnumeratedPairs.csv)
+  # 仅优化 (需要已有 Step2_EnumeratedPairs.csv)
   python3 ruyituner.py --dataset datasets/x86 --llvm_tools_path ../llvm_dir/build/bin --only_run \
-      --paircsv output/Step3_EnumeratedPairs.csv
+      --paircsv output/Step2_EnumeratedPairs.csv
 """
 
 import argparse
@@ -82,7 +82,7 @@ def main():
     parser.add_argument('--only_run', action='store_true',
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
-                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step3_EnumeratedPairs.csv')
+                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step2_EnumeratedPairs.csv')
     args = parser.parse_args()
 
     if args.only_train and args.only_run:
@@ -101,7 +101,7 @@ def main():
             sys.exit(rc)
 
     if not args.only_train:
-        paircsv = args.paircsv or os.path.join(out_dir, 'Step3_EnumeratedPairs.csv')
+        paircsv = args.paircsv or os.path.join(out_dir, 'Step2_EnumeratedPairs.csv')
         if not os.path.isfile(paircsv):
             print(f'[ruyituner] 找不到协同对文件: {paircsv}, 请先完成训练.')
             sys.exit(1)

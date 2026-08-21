@@ -14,9 +14,8 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 ```
 ├── datasets/           # LLVM IR (.ll) 测试文件
 ├── output/             # 训练输出结果
-│   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对
-│   ├── Step2_FilterSynerPairs.csv     # 过滤后的协同Pass对
-│   ├── Step3_EnumeratedPairs.csv      # 枚举的所有协同对
+│   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对(已过滤空结果)
+│   ├── Step2_EnumeratedPairs.csv      # 枚举的所有协同对
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -40,7 +39,7 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 - pandas
 - LLVM 工具链
   - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
-  - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果一致，互不影响正确性。
+  - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
   - RuyiTuner 只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间。
 
 ## 使用方法
@@ -61,12 +60,12 @@ python3 ruyituner.py \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
-# 仅优化（复用已有的Step3_EnumeratedPairs.csv）
+# 仅优化（复用已有的Step2_EnumeratedPairs.csv）
 python3 ruyituner.py \
     --dataset ./datasets/x86 \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
-    --paircsv ./output/Step3_EnumeratedPairs.csv
+    --paircsv ./output/Step2_EnumeratedPairs.csv
 ```
 
 **参数说明：**
@@ -74,7 +73,7 @@ python3 ruyituner.py \
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
-- `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step3_EnumeratedPairs.csv`
+- `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--isriscv`: (可选) 是否针对RISC-V架构
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
@@ -82,7 +81,7 @@ python3 ruyituner.py \
 
 ### 2. 训练阶段：生成pass列表并发现协同Pass对
 
-训练需要一份与所使用LLVM版本匹配的pass列表（passes_XXXX.txt），可以手动选择构建，也可以由train.py自动生成；自动生成的pass列表会检查输出IR是否可以被opt重新解析，剔除不可用的pass，避免在训练和优化阶段出现问题。可自主添加LLVM Pass到passes_XXXX.txt文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成三个阶段的CSV文件。
+训练需要一份与所使用LLVM版本匹配的pass列表（passes_XXXX.txt），可以手动选择构建，也可以由train.py自动生成；自动生成的pass列表会检查输出IR是否可以被opt重新解析，剔除不可用的pass，避免在训练和优化阶段出现问题。可自主添加LLVM Pass到passes_XXXX.txt文件中以及训练文件到datasets文件夹中作为补充。训练脚本会分析指定数据集中的 .ll 文件，识别具有协同效应的Pass组合，并生成两个阶段的CSV文件。
 
 ```bash
 mkdir -p output
@@ -122,9 +121,8 @@ python3 train.py \
 - `--isriscv`: (可选) 是否是针对RISC-V架构的代码优化
 
 **输出文件：**
-- `Step1_FindSynerPairs.csv`: 初步发现的协同Pass对
-- `Step2_FilterSynerPairs.csv`: 过滤空列表后的结果
-- `Step3_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
+- `Step1_FindSynerPairs.csv`: 发现的协同Pass对（写入时已过滤掉空列表行）
+- `Step2_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
 
 ### 3. 优化阶段：使用GA优化代码
 
@@ -135,7 +133,7 @@ cd scripts
 python3 run.py \
     --dataset ../datasets/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
-    --paircsv ../output/Step3_EnumeratedPairs.csv
+    --paircsv ../output/Step2_EnumeratedPairs.csv
 ```
 
 **参数说明：**
@@ -164,7 +162,6 @@ python3 run.py \
 - 将所有passes_XXX.txt移动到新建目录passes_examples下；
 - 更新utils/common.py，增加了异常和错误处理代码，还增加了libAutophase处理前的准备代码，去除了一些libAutophase无法识别的LLVM22引入的新语法；
 - 根据上述变动，更新Readme文件；同时，更新Readme中一些与代码不符的内容；
-- v1.1版本发布于2026年8月19日。
 
 #### 1.2版本变更
 - 指令计数不再依赖lib/libAutophase_21_1_8.so,改为直接使用opt对IR文本统计，移除了ctypes加载代码和LLVM22新语法的预处理代码，也不再要求GLIBC_2.38；这种方式解决了lib/libAutophase_21_1_8.so对LLVM版本限制较多的情况；
@@ -181,4 +178,6 @@ python3 run.py \
 - 新增pass列表生成相关参数：--passlist_output（指定生成文件路径）、--no_parse_check（跳过输出IR解析检查）、--keep_instrumentation（保留插桩类pass）、--extra_exclude（额外排除规则）；
 - 新增ruyituner.py入口脚本，一次调用依次完成训练(train.py)与优化(run.py)两个阶段，支持--only_train/--only_run单独执行；
 - 将utils工具模块移动到scripts目录下，并更新相关脚本中的路径引用；
+- 训练阶段不再保存中间文件，空列表行的过滤在写入时直接完成，输出文件由3个减少为2个，并重新编号为Step1_FindSynerPairs.csv与Step2_EnumeratedPairs.csv；
+- 更新Readme中`环境要求`部分对两种指令计数方式的描述：由"结果一致"改为"结果基本一致"（text与opt-stats在部分pass上计数存在细微差异，后续再排查）；
 - 根据上述修改，更新Readme，包含合并`使用方法`部分的`准备阶段`与`训练阶段`，更新参数列表等内容。

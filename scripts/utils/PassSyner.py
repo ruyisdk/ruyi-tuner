@@ -45,6 +45,10 @@ class PassSyner:
         
         filename = os.path.basename(filepath)
 
+        # 空列表行直接跳过, 不写入，替代原来的过滤步骤
+        if not syner_passpairs:
+            return
+
         with self.lock:
             with open(output_csv_path, 'a', newline='') as csvfile:
                 writer = csv.writer(csvfile)
