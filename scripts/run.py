@@ -11,6 +11,8 @@ current_file_path = os.path.abspath(__file__)
 # Get the parent directory of the current file
 project_root = os.path.dirname(os.path.dirname(current_file_path))
 sys.path.append(project_root)
+# scripts/ 目录, 保证从任意工作目录运行时都能 import utils
+sys.path.insert(0, os.path.dirname(current_file_path))
 from utils.GA import LeverageSyner_GA_codesize
 from utils.common import get_inst_count_method
 

@@ -4,7 +4,8 @@ import re
 import subprocess
 
 
-project_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 项目根目录 (scripts/utils/common.py -> scripts -> 项目根), 供外部脚本/历史依赖使用
+project_directory = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_directory)
 
 # LLVM IR 文本排版规律: 标签在 0 列, 指令行固定缩进 2 列, switch 等续行缩进 4 列

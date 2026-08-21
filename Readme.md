@@ -25,11 +25,11 @@ RuyiTuner 是一个自动化的LLVM编译器优化工具，它通过以下步骤
 ├── ruyituner.py        # 一键入口：依次执行训练(train.py)与优化(run.py)
 ├── scripts/            # 主要执行脚本
 │   ├── train.py        # 训练脚本：发现协同Pass对（含pass列表自动生成）
-│   └── run.py          # 运行脚本：使用GA优化代码
-├── utils/              # 工具模块
-│   ├── GA.py           # 遗传算法实现
-│   ├── PassSyner.py    # Pass协同效应分析
-│   └── common.py       # 公共工具函数
+│   ├── run.py          # 运行脚本：使用GA优化代码
+│   └── utils/          # 工具模块
+│       ├── GA.py       # 遗传算法实现
+│       ├── PassSyner.py # Pass协同效应分析
+│       └── common.py   # 公共工具函数
 |── README.md           # 项目说明文档
 |── passes_XXX.txt      # 可自定义的LLVM Pass列表,可以采用脚本自动生成或者自己编辑
 ```
@@ -52,21 +52,21 @@ ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完�
 ```bash
 # 完整流程：训练 → 用训练得到的协同Pass对做GA优化
 python3 ruyituner.py \
-    --dataset ../datasets/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin
+    --dataset ./datasets/x86 \
+    --llvm_tools_path /llvm_dir/build/bin
 
 # 仅训练，不优化
 python3 ruyituner.py \
-    --dataset ../datasets/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --dataset ./datasets/x86 \
+    --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
 # 仅优化（复用已有的Step3_EnumeratedPairs.csv）
 python3 ruyituner.py \
-    --dataset ../datasets/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --dataset ./datasets/x86 \
+    --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
-    --paircsv ../output/Step3_EnumeratedPairs.csv
+    --paircsv ./output/Step3_EnumeratedPairs.csv
 ```
 
 **参数说明：**
@@ -180,4 +180,5 @@ python3 run.py \
 - train.py的--output_dir参数改为可选：未指定时自动创建并使用项目根目录下的output目录，并输出提示信息（训练示例注释同步说明--output_dir可省略）；
 - 新增pass列表生成相关参数：--passlist_output（指定生成文件路径）、--no_parse_check（跳过输出IR解析检查）、--keep_instrumentation（保留插桩类pass）、--extra_exclude（额外排除规则）；
 - 新增ruyituner.py入口脚本，一次调用依次完成训练(train.py)与优化(run.py)两个阶段，支持--only_train/--only_run单独执行；
+- 将utils工具模块移动到scripts目录下，并更新相关脚本中的路径引用；
 - 根据上述修改，更新Readme，包含合并`使用方法`部分的`准备阶段`与`训练阶段`，更新参数列表等内容。
