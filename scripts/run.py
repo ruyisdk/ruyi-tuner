@@ -47,7 +47,7 @@ for filename in filenames:
     print("Current File:", filename)  
     path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path)
     if (score == 0):
-        print(f"Score is 0: {filename}")
+        print(f"Score is 0: {filename}\n")
         continue
     all.append(score)
     print("Path: ", path)
