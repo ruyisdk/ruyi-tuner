@@ -160,7 +160,12 @@ def fix_loop_nesting(pipeline: str) -> str:
 
 
 def _report_opt_failure(pipeline, stderr_text):
-    '''opt 执行失败时把关键报错信息打印到 stderr, 便于排查(如 unknown pass)'''
+    '''opt 执行失败时把关键报错信息打印到 stderr, 便于排查(如 unknown pass).
+
+    优化/训练过程中大量 pass 组合会触发 opt 崩溃, 逐条打印会淹没整体输出,
+    因此默认静默; 设置环境变量 RUYITUNER_SHOW_OPT_FAILURES=1 可重新开启输出.'''
+    if os.environ.get('RUYITUNER_SHOW_OPT_FAILURES') != '1':
+        return
     msg = (stderr_text or "").strip()
     key_line = msg.splitlines()[-1] if msg else "no stderr output"
     print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)

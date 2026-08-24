@@ -186,4 +186,5 @@ python3 run.py \
 - 移除--isriscv参数：ruyituner.py/train.py/run.py删除该命令行参数，utils/common.py、utils/GA.py、utils/PassSyner.py删除参数定义与透传，架构信息由每个.ll文件自身的内嵌target triple决定，天然支持RISC-V、x86及混合架构数据集；
 - utils/GA.py新增防御处理：协同对列表为空时直接返回空路径与0分，避免GA在空协同对图上崩溃（IndexError）；
 - train.py的pass列表生成默认剔除module(internalize)：opt独立运行该pass时会连同main一起internalize，随后清理类pass会清空整个模块，导致GA得分虚高为1.0（假胜利）；已在生成pass列表时默认排除，无需再手动加--extra_exclude；
+- utils/common.py中opt执行失败的逐条报错([opt failed])默认静默输出，避免优化阶段大量pass组合崩溃信息淹没整体输出；设置环境变量RUYITUNER_SHOW_OPT_FAILURES=1可重新开启以便排查；
 - 根据上述修改，更新Readme中对应参数说明。
