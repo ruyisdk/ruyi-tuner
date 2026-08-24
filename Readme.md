@@ -75,6 +75,7 @@ python3 ruyituner.py \
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
+- `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -138,6 +139,7 @@ python3 run.py \
 - `--dataset`: 待优化的 .ll 文件或包含 .ll 文件的目录
 - `--llvm_tools_path`: LLVM工具链路径
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
+- `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
 
 **输出：**
 - 输出用于优化的Pass序列
@@ -189,3 +191,6 @@ python3 run.py \
 - utils/common.py中opt执行失败的逐条报错([opt failed])默认静默输出，避免优化阶段大量pass组合崩溃信息淹没整体输出；设置环境变量RUYITUNER_SHOW_OPT_FAILURES=1可重新开启以便排查；
 - scripts/run.py中0分文件的输出信息补充空行，避免与下一个文件的优化结果混排；
 - 根据上述修改，更新Readme中对应参数说明。
+
+#### 1.5版本变更
+- 新增--opt-level参数（ruyituner.py/run.py，默认Oz）：GA基线评分原来写死-Oz，现可由O0/O1/O2/O3/Os/Oz控制；utils/common.py的优化等级分支相应泛化，同时支持-Ox与default<Ox>两种写法；

@@ -2,9 +2,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from utils.common import get_instrcount
 
-def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path):
+def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
         import random
-        Oz = get_instrcount(ll_code, ["-Oz"], llvm_tools_path=llvm_tools_path)
+        Oz = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path)
         # print("Oz: ", Oz)
         if(Oz == 0):
             print("file", ll_code, ": Oz is 0!\n")

@@ -20,6 +20,7 @@ parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
 parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
+parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
 
 args = parser.parse_args()
 
@@ -45,7 +46,7 @@ for filename in filenames:
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print("Current File:", filename)  
-    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path)
+    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level)
     if (score == 0):
         print(f"Score is 0: {filename}\n")
         continue

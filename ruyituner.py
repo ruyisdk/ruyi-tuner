@@ -65,6 +65,9 @@ def main():
                         help='训练用的 pass 列表文件; 不提供时 train.py 自动生成')
     parser.add_argument('--num_workers', type=int, default=16,
                         help='训练并行工作线程数, 默认16')
+    parser.add_argument('--opt-level', type=str, default='Oz',
+                        choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
+                        help='GA 基线评分的优化等级, 默认 Oz (传给 run.py)')
     parser.add_argument('--passlist_output', type=str, default=None,
                         help='把自动生成的 pass 列表写入该文件 (传给 train.py)')
     parser.add_argument('--no_parse_check', action='store_true',
@@ -104,7 +107,8 @@ def main():
         run_cmd = [sys.executable, RUN_SCRIPT,
                    '--dataset', args.dataset,
                    '--llvm_tools_path', args.llvm_tools_path,
-                   '--paircsv', paircsv]
+                   '--paircsv', paircsv,
+                   '--opt-level', args.opt_level]
         print('=' * 60)
         print(f'[ruyituner] 阶段 2/2: GA 优化 (协同对: {paircsv})')
         print('=' * 60)
