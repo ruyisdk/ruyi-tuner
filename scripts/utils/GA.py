@@ -2,13 +2,17 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from utils.common import get_instrcount
 
-def LeverageSyner_GA_codesize(edges, ll_code, isriscv, llvm_tools_path):
+def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path):
         import random
-        Oz = get_instrcount(ll_code,["-Oz"],isriscv=isriscv,llvm_tools_path=llvm_tools_path)
+        Oz = get_instrcount(ll_code, ["-Oz"], llvm_tools_path=llvm_tools_path)
         # print("Oz: ", Oz)
         if(Oz == 0):
             print("file", ll_code, ": Oz is 0!\n")
             return 0
+        # 协同对列表为空时无法构建图, 直接返回空路径/零分, 避免 generate_population 崩溃
+        if not edges:
+            print("协同对列表为空, 跳过该文件.\n")
+            return [], 0
         # 创建图
         graph = defaultdict(list)
         nodes = set()
@@ -57,7 +61,7 @@ def LeverageSyner_GA_codesize(edges, ll_code, isriscv, llvm_tools_path):
 
         # 计算适应度
         def fitness_function(path):
-            score = (Oz - get_instrcount(ll_code, path, isriscv=isriscv, llvm_tools_path=llvm_tools_path)) / Oz
+            score = (Oz - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path)) / Oz
             return score, path
 
         def calculate_fitness(population):

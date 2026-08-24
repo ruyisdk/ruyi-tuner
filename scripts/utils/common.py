@@ -166,7 +166,7 @@ def _report_opt_failure(pipeline, stderr_text):
     print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
 
 
-def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
+def get_instrcount(ir_code, opt_flags, llvm_tools_path):
 
     pipeline = ",".join(opt_flags)
     opt_path = os.path.join(llvm_tools_path, "opt") if llvm_tools_path else "opt"
@@ -178,10 +178,8 @@ def get_instrcount(ir_code, opt_flags, isriscv, llvm_tools_path):
 
     if pipeline == "default<Oz>" or pipeline == "-Oz":
         try:
-            if isriscv:
-                cmd_opt = [opt_path] + ["-Oz"] + ["-S"] + ["--target=riscv64-unknown-linux-gnu"]
-            else:
-                cmd_opt = [opt_path] + ["-Oz"] + ["-S"]
+            # 目标架构由 IR 内嵌的 target triple 决定 (x86/riscv 数据集均已内嵌)
+            cmd_opt = [opt_path] + ["-Oz"] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
             return get_inst_count(after_ll_code, llvm_tools_path)

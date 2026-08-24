@@ -20,7 +20,6 @@ parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
 parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
-parser.add_argument("--isriscv", action='store_true', help="Whether the target architecture is RISC-V, which requires special handling in clang command")
 
 args = parser.parse_args()
 
@@ -46,7 +45,7 @@ for filename in filenames:
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print("Current File:", filename)  
-    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, isriscv=args.isriscv, llvm_tools_path=args.llvm_tools_path)
+    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path)
     if (score == 0):
         print(f"Score is 0: {filename}")
         continue

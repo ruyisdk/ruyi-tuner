@@ -40,8 +40,6 @@ def build_train_cmd(args):
         cmd += ['--output_dir', args.output_dir]
     if args.passfile is not None:
         cmd += ['--passfile', args.passfile]
-    if args.isriscv:
-        cmd += ['--isriscv']
     if args.passlist_output is not None:
         cmd += ['--passlist_output', args.passlist_output]
     if args.no_parse_check:
@@ -67,8 +65,6 @@ def main():
                         help='训练用的 pass 列表文件; 不提供时 train.py 自动生成')
     parser.add_argument('--num_workers', type=int, default=16,
                         help='训练并行工作线程数, 默认16')
-    parser.add_argument('--isriscv', action='store_true',
-                        help='目标架构是否为 RISC-V')
     parser.add_argument('--passlist_output', type=str, default=None,
                         help='把自动生成的 pass 列表写入该文件 (传给 train.py)')
     parser.add_argument('--no_parse_check', action='store_true',
@@ -109,8 +105,6 @@ def main():
                    '--dataset', args.dataset,
                    '--llvm_tools_path', args.llvm_tools_path,
                    '--paircsv', paircsv]
-        if args.isriscv:
-            run_cmd += ['--isriscv']
         print('=' * 60)
         print(f'[ruyituner] 阶段 2/2: GA 优化 (协同对: {paircsv})')
         print('=' * 60)

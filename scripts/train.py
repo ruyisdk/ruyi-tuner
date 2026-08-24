@@ -283,7 +283,6 @@ args.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a 
 args.add_argument("--output_dir", type=str, default=None, help="output file path; if not provided, defaults to <project_root>/output and is created automatically")
 args.add_argument("--num_workers", type=int, default=16, help="number of workers for parallel processing")
 args.add_argument("--passfile", type=str, default=None, help="the pass list to be used for synergistic pair finding, e.g., llvm21_1_8 or llvm18_1_6; if not provided, it will be automatically generated")
-args.add_argument("--isriscv", action='store_true', help="Whether the target architecture is RISC-V, which requires special handling in clang command")
 args.add_argument("--gen_passlist_only", action='store_true', help="only generate a pass list and exit, without training")
 args.add_argument("--passlist_output", type=str, default=None, help="output path for the generated pass list, defaults to passes_<llvm_version>.txt")
 args.add_argument("--no_parse_check", action='store_true', help="skip opt re-parse verification of pass output IR")
@@ -318,7 +317,7 @@ else:
     # 未提供 --passfile 时自动生成 pass 列表(默认不写文件), 然后继续训练
     passlist = generate_passlist(args, write_default=False)
 
-syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, isriscv=args.isriscv, num_works=args.num_workers)
+syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
 syner.FindSynerPasses(output_file)
 print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv (rows with empty lists are skipped)")

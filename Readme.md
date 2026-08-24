@@ -75,7 +75,6 @@ python3 ruyituner.py \
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
-- `--isriscv`: (可选) 是否针对RISC-V架构
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -118,7 +117,6 @@ python3 train.py \
 - `--keep_instrumentation`: (可选) 保留插桩类pass（asan/tsan/pgo-*等，默认剔除）
 - `--extra_exclude`: (可选) 额外的pass排除规则（正则表达式）
 - `--num_workers`: (可选) 并行处理的工作进程数，默认16
-- `--isriscv`: (可选) 是否是针对RISC-V架构的代码优化
 
 **输出文件：**
 - `Step1_FindSynerPairs.csv`: 发现的协同Pass对（写入时已过滤掉空列表行）
@@ -140,7 +138,6 @@ python3 run.py \
 - `--dataset`: 待优化的 .ll 文件或包含 .ll 文件的目录
 - `--llvm_tools_path`: LLVM工具链路径
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
-- `--isriscv`: (可选) 是否是针对RISC-V架构的代码优化
 
 **输出：**
 - 输出用于优化的Pass序列
@@ -181,3 +178,12 @@ python3 run.py \
 - 训练阶段不再保存中间文件，空列表行的过滤在写入时直接完成，输出文件由3个减少为2个，并重新编号为Step1_FindSynerPairs.csv与Step2_EnumeratedPairs.csv；
 - 更新Readme中`环境要求`部分对两种指令计数方式的描述：由"结果一致"改为"结果基本一致"（text与opt-stats在部分pass上计数存在细微差异，后续再排查）；
 - 根据上述修改，更新Readme，包含合并`使用方法`部分的`准备阶段`与`训练阶段`，更新参数列表等内容。
+
+#### 1.4版本变更
+- 新增RISC-V训练数据集datasets/riscv：使用面向RISC-V的交叉clang从C++源码生成10个.ll文件（clang++ -O0 -S -emit-llvm --target=riscv64-unknown-linux-gnu），覆盖整数运算/数组/矩阵/字符串switch/位操作/双精度浮点/结构体/排序查找/递归等类别，每个文件含main+scanf/printf I/O与多个C++修饰名函数，并内嵌riscv64的target triple与datalayout，风格与datasets/x86一致；
+- 数据集生成的clang命令使用`-Xclang -disable-O0-optnone`，避免-O0默认的optnone/noinline属性导致opt跳过所有pass（表现为单pass指令数不减少、训练找不到协同对）；
+- 修复utils/common.py中-Oz评分分支的目标参数问题：原--target=...是clang的参数，LLVM 21.x/22.x各build目录下的opt均不支持（实测均只接受-mtriple），导致--isriscv时-Oz评分静默回退为原始IR计数；该分支现不再附加任何目标参数，目标架构由IR内嵌的target triple决定；
+- 移除--isriscv参数：ruyituner.py/train.py/run.py删除该命令行参数，utils/common.py、utils/GA.py、utils/PassSyner.py删除参数定义与透传，架构信息由每个.ll文件自身的内嵌target triple决定，天然支持RISC-V、x86及混合架构数据集；
+- utils/GA.py新增防御处理：协同对列表为空时直接返回空路径与0分，避免GA在空协同对图上崩溃（IndexError）；
+- 训练经验记录：opt独立运行module(internalize)时会连同main一起internalize，随后清理类pass会清空整个模块，导致GA得分虚高为1.0（假胜利）；训练时建议加--extra_exclude '^internalize$'排除该pass；
+- 根据上述修改，更新Readme中对应参数说明。
