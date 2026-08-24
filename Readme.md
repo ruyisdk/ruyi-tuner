@@ -177,12 +177,10 @@ python3 run.py \
 **输出示例：**
 
 ```text
-Current File: datasets/riscv/1_01.ll
-Path:  ['function(mem2reg)', 'function(instcombine)', 'function(dce)', 'function(gvn)']
-Score:  0.16666666666666666
-Mean:  0.2819069069069069
-
-Score is 0: datasets/riscv/1_02.ll
+Current File: datasets/x86/1_24.ll
+Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
+Score:  0.015384615384615385
+Mean:  0.06032388663967611
 ```
 
 
