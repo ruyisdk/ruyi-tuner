@@ -51,7 +51,7 @@ RuyiTuner 是一个基于遗传算法(GA)的 LLVM 编译优化 Pass 调优工具
   - RuyiTuner 只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间。
 - 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。
 
-## 使用方法
+## 使用说明
 
 ### 1. 一键完成训练与优化（ruyituner.py）
 
@@ -153,17 +153,6 @@ python3 train.py \
 
 **评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数；得分 = (基线指令数 - GA序列优化后指令数) / 基线指令数。得分为正表示 GA 序列比基线更短（有效改进，例如 0.1 表示再少 10%）；得分为 0 表示与基线持平；得分 1.0 属于异常（模块被清空，通常是 internalize 类 pass 导致）。最终打印每个文件的最优序列、得分，以及所有正分文件的平均分。
 
-**输出示例：**
-
-```text
-Current File: datasets/riscv/1_01.ll
-Path:  ['function(mem2reg)', 'function(instcombine)', 'function(dce)', 'function(gvn)']
-Score:  0.16666666666666666
-Mean:  0.2819069069069069
-
-Score is 0: datasets/riscv/1_02.ll
-```
-
 **使用演示：**
 
 ```bash
@@ -184,6 +173,17 @@ python3 run.py \
 - 输出用于优化的Pass序列
 - 打印该序列下的优化得分
 - 输出所有文件的平均优化得分
+
+**输出示例：**
+
+```text
+Current File: datasets/riscv/1_01.ll
+Path:  ['function(mem2reg)', 'function(instcombine)', 'function(dce)', 'function(gvn)']
+Score:  0.16666666666666666
+Mean:  0.2819069069069069
+
+Score is 0: datasets/riscv/1_02.ll
+```
 
 
 ## 注意事项
