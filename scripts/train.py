@@ -88,6 +88,10 @@ INSTRUMENTATION_PATTERN = re.compile(
     r'^(asan|hwasan|msan|tsan|dfsan|nsan|rtsan|tysan|sanmd|sancov'
     r'|pgo-|instrprof|insert-gcov-profiling|sample-profile|memprof|ctx-prof|ctx-instr)')
 
+# 独立运行的 internalize 会连同 main 一起 internalize, 之后清理类 pass 会把整个
+# 模块清空, 导致 GA 评分虚高为 1.0 (假胜利), 因此在生成 pass 列表时默认剔除
+INTERNALIZE_PATTERN = re.compile(r'^internalize$')
+
 
 def get_opt_version(opt_path):
     r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
@@ -185,7 +189,7 @@ def generate_passlist(args, write_default=True):
     version = get_opt_version(opt_path)
     print(f'opt 版本: {version} ({opt_path})')
 
-    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN)]
+    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN), ('内部化类', INTERNALIZE_PATTERN)]
     if not args.keep_instrumentation:
         exclude_patterns.append(('插桩类', INSTRUMENTATION_PATTERN))
     if args.extra_exclude:

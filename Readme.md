@@ -185,5 +185,5 @@ python3 run.py \
 - 修复utils/common.py中-Oz评分分支的目标参数问题：原--target=...是clang的参数，LLVM 21.x/22.x各build目录下的opt均不支持（实测均只接受-mtriple），导致--isriscv时-Oz评分静默回退为原始IR计数；该分支现不再附加任何目标参数，目标架构由IR内嵌的target triple决定；
 - 移除--isriscv参数：ruyituner.py/train.py/run.py删除该命令行参数，utils/common.py、utils/GA.py、utils/PassSyner.py删除参数定义与透传，架构信息由每个.ll文件自身的内嵌target triple决定，天然支持RISC-V、x86及混合架构数据集；
 - utils/GA.py新增防御处理：协同对列表为空时直接返回空路径与0分，避免GA在空协同对图上崩溃（IndexError）；
-- 训练经验记录：opt独立运行module(internalize)时会连同main一起internalize，随后清理类pass会清空整个模块，导致GA得分虚高为1.0（假胜利）；训练时建议加--extra_exclude '^internalize$'排除该pass；
+- train.py的pass列表生成默认剔除module(internalize)：opt独立运行该pass时会连同main一起internalize，随后清理类pass会清空整个模块，导致GA得分虚高为1.0（假胜利）；已在生成pass列表时默认排除，无需再手动加--extra_exclude；
 - 根据上述修改，更新Readme中对应参数说明。
