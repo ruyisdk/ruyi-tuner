@@ -171,6 +171,12 @@ def _report_opt_failure(pipeline, stderr_text):
     print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
 
 
+# 合法的优化等级写法: "-Oz" 或 "default<Oz>" (opt 管道形式), 用于基线评分
+_OPT_LEVEL_FLAGS = ('-O0', '-O1', '-O2', '-O3', '-Os', '-Oz',
+                    'default<O0>', 'default<O1>', 'default<O2>',
+                    'default<O3>', 'default<Os>', 'default<Oz>')
+
+
 def get_instrcount(ir_code, opt_flags, llvm_tools_path):
 
     pipeline = ",".join(opt_flags)
@@ -181,10 +187,11 @@ def get_instrcount(ir_code, opt_flags, llvm_tools_path):
     input_code_io.write(ir_code)
     input_code_io.seek(0)
 
-    if pipeline == "default<Oz>" or pipeline == "-Oz":
+    if pipeline in _OPT_LEVEL_FLAGS:
         try:
-            # 目标架构由 IR 内嵌的 target triple 决定 (x86/riscv 数据集均已内嵌)
-            cmd_opt = [opt_path] + ["-Oz"] + ["-S"]
+            # 优化等级作为 opt 顶层参数; 目标架构由 IR 内嵌的 target triple 决定
+            flag = f"-{pipeline[len('default<'):-1]}" if pipeline.startswith('default<') else pipeline
+            cmd_opt = [opt_path] + [flag] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
             return get_inst_count(after_ll_code, llvm_tools_path)
