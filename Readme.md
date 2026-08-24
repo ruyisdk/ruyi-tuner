@@ -57,6 +57,8 @@ RuyiTuner 是一个基于遗传算法(GA)的 LLVM 编译优化 Pass 调优工具
 
 ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。
 
+**使用演示：**
+
 ```bash
 # 完整流程：训练 → 用训练得到的协同Pass对做GA优化
 python3 ruyituner.py \
@@ -98,6 +100,8 @@ python3 ruyituner.py \
 - **两两配对**：对每个有效 pass 作为序列后段 B，与全部候选 pass 依次组成两段序列 `[A, B]`（A 在前、B 在后）运行并统计指令数；若 `[A, B]` 的指令数比 B 单独运行时更少（即加入 A 能带来额外收益），则把 `(A, B)` 记为协同对。
 
 所有文件找到的协同对汇总去重后，分别写入 Step1（按文件保存协同对列表）与 Step2（枚举全部唯一协同对，供优化阶段的 GA 使用）。
+
+**使用演示：**
 
 ```bash
 mkdir -p output
@@ -159,6 +163,8 @@ Mean:  0.2819069069069069
 
 Score is 0: datasets/riscv/1_02.ll
 ```
+
+**使用演示：**
 
 ```bash
 cd scripts
