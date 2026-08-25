@@ -1,20 +1,20 @@
 # RuyiTuner
 
-基于遗传算法的 LLVM Pass 调优工具，自动搜索缩小代码体积的 Pass 序列。
+基于 Pass 协同效应分析的 LLVM 调优工具，自动挖掘 Pass 间的协同效应，搜索代码体积最优的 Pass 序列。
 
 ## 项目简介
 
-RuyiTuner 是一个基于遗传算法(GA)的 LLVM 编译优化 Pass 调优工具，目标是在目标架构的 LLVM IR 上自动搜索能够最大化缩减代码体积的 Pass 序列。与固定的传统优化流水线（如 -O2/-Oz）不同，RuyiTuner 通过实测数据挖掘 Pass 之间的"协同效应"，找出一些 Pass 组合，这些组合所产生的优化效果优于各 Pass 单独作用之和。
+RuyiTuner 是一个基于 Pass 协同效应分析的 LLVM 编译优化调优工具，目标是在目标架构的 LLVM IR 上自动搜索能够最大化缩减代码体积的 Pass 序列。与固定的传统优化流水线（如 -O2/-Oz）不同，RuyiTuner 通过实际运行数据挖掘 Pass 之间的"协同效应"，找出一些 Pass 组合——这些组合所产生的优化效果优于各 Pass 单独作用之和，并以这些协同对为搜索空间、基于遗传算法搜索最优的 Pass 序列。
 
 工作流程分为两个阶段：
 
 1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step1/Step2 两级 CSV 供优化阶段使用。
 
-2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，用遗传算法进化 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、得分与平均分。
+2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、得分与平均分。
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
-**使用方式**：全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）。
+**使用方式**：输入为包含 .ll 文件的数据集目录与 LLVM 工具链路径（opt）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
 
 ## 项目结构
 
@@ -34,7 +34,7 @@ RuyiTuner 是一个基于遗传算法(GA)的 LLVM 编译优化 Pass 调优工具
 ├── CHANGELOG.md         # 版本变更记录
 ├── scripts/             # 主要执行脚本
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
-│   ├── run.py           # 运行脚本：使用GA优化代码
+│   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析

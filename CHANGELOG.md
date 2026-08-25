@@ -50,3 +50,5 @@
 - Readme新增"注意事项"小节：小数据集上-Os/-Oz基线可能相同需更大真实程序、.ll文件需内嵌target triple且不带optnone（否则opt跳过pass）、RISC-V数据集需搭配面向RISC-V的交叉编译工具链opt；
 - 使用方法补充细节说明：训练阶段补充协同对的发现过程（单Pass筛选+两两配对）、优化阶段补充GA算法简介/整体优化过程/评分标准与真实输出示例；
 - 新增架构一致性校验：utils/common.py中check_dataset_arch_matches_opt在训练/优化前校验数据集.ll文件内嵌target triple的架构与opt默认目标架构一致（train.py/run.py均已接入），防止用x86目标架构的opt处理riscv数据（反之亦然）；文件缺失triple或架构不匹配时直接报错退出；
+- Readme整体介绍改为突出Pass协同效应分析：标题tagline、项目简介与工作流程以协同效应为定位，遗传算法保留为搜索方法的描述（基于遗传算法搜索最优Pass序列），优化阶段对遗传算法的描述保持不变；
+- 项目简介的使用方式中补充输入输出说明，并添加指向使用说明的跳转链接；
