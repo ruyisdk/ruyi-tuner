@@ -14,7 +14,7 @@ sys.path.append(project_root)
 # scripts/ 目录, 保证从任意工作目录运行时都能 import utils
 sys.path.insert(0, os.path.dirname(current_file_path))
 from utils.GA import LeverageSyner_GA_codesize
-from utils.common import get_inst_count_method
+from utils.common import get_inst_count_method, check_dataset_arch_matches_opt
 
 parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
@@ -39,6 +39,9 @@ elif os.path.isfile(args.dataset) and args.dataset.endswith(".ll"):
 else:
     raise ValueError("The dataset argument must be a directory containing .ll files or a specific .ll file.")
 
+# 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
+check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.llvm_tools_path, 'opt'))
+
 all = []
 
 for filename in filenames:
@@ -47,12 +50,12 @@ for filename in filenames:
         ll_code = ll_file.read()
     print("Current File:", filename)  
     path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level)
-    if (score == 0):
-        print(f"Score is 0: {filename}\n")
-        continue
-    all.append(score)
-    print("Path: ", path)
+    # 0分文件也按统一格式输出, 平均分仍只统计正分文件; 0分时Path输出为空
+    if (score != 0):
+        all.append(score)
+    mean = sum(all) / len(all) if all else 0.0
+    print("Path: ", path if score != 0 else [])
     print("Score: ", score)
-    print("Mean: ", sum(all) / len(all))
+    print("Mean: ", mean)
     print()
 

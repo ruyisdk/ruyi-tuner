@@ -90,6 +90,40 @@ def get_inst_count_method(llvm_tools_path=None):
             return 'opt-stats'
     return 'text'
 
+
+def get_opt_default_arch(opt_path):
+    '''从 `opt --version` 输出中提取默认目标架构 (target triple 的第一段).
+
+    构建时未设置默认目标 (如通用构建) 时返回 None.'''
+    r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    m = re.search(r'Default target:\s*(\S*)', r.stdout + r.stderr)
+    if not m or not m.group(1):
+        return None
+    return m.group(1).split('-', 1)[0]
+
+
+def check_dataset_arch_matches_opt(ll_files, opt_path):
+    '''校验数据集 .ll 文件内嵌 target triple 的架构与 opt 默认目标架构一致.
+
+    防止用 x86 目标架构的 opt 处理 riscv 的 .ll 数据 (反之亦然); 任一文件缺失
+    target triple 或架构不匹配时直接退出. opt 未设置默认目标时无法校验, 跳过.'''
+    opt_arch = get_opt_default_arch(opt_path)
+    for path in ll_files:
+        with open(path, 'r') as f:
+            text = f.read()
+        m = re.search(r'target triple\s*=\s*"([^"]+)"', text)
+        if not m:
+            raise SystemExit(f'{path}: 缺少内嵌的 target triple, 请重新生成数据集文件 (见 Readme 注意事项).')
+        ir_arch = m.group(1).split('-', 1)[0]
+        if opt_arch is None:
+            continue
+        if ir_arch.lower() != opt_arch.lower():
+            raise SystemExit(
+                f'{path}: IR 目标架构 {ir_arch} 与 opt 默认目标 {opt_arch} 不一致, '
+                f'请使用与数据集架构匹配的工具链 opt (--llvm_tools_path).')
+
 def fix_loop_nesting(pipeline: str) -> str:
     '''
         把loop pass嵌套进离他最近的前面的function pass中，因为loop pass不能单独使用
