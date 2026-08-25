@@ -50,12 +50,12 @@ for filename in filenames:
         ll_code = ll_file.read()
     print("Current File:", filename)  
     path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level)
-    if (score == 0):
-        print(f"Score is 0: {filename}\n")
-        continue
-    all.append(score)
-    print("Path: ", path)
+    # 0分文件也按统一格式输出, 平均分仍只统计正分文件; 0分时Path输出为空
+    if (score != 0):
+        all.append(score)
+    mean = sum(all) / len(all) if all else 0.0
+    print("Path: ", path if score != 0 else [])
     print("Score: ", score)
-    print("Mean: ", sum(all) / len(all))
+    print("Mean: ", mean)
     print()
 

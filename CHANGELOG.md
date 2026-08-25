@@ -52,3 +52,4 @@
 - 新增架构一致性校验：utils/common.py中check_dataset_arch_matches_opt在训练/优化前校验数据集.ll文件内嵌target triple的架构与opt默认目标架构一致（train.py/run.py均已接入），防止用x86目标架构的opt处理riscv数据（反之亦然）；文件缺失triple或架构不匹配时直接报错退出；
 - Readme整体介绍改为突出Pass协同效应分析：标题tagline、项目简介与工作流程以协同效应为定位，遗传算法保留为搜索方法的描述（基于遗传算法搜索最优Pass序列），优化阶段对遗传算法的描述保持不变；
 - 项目简介的使用方式中补充输入输出说明，并添加指向使用说明的跳转链接；
+- scripts/run.py中0分文件的输出改为与正分文件相同的格式（统一输出Path/Score/Mean三行，0分时Path输出为空；Mean仍只统计正分文件、正分文件为空时记0.0；此前0分文件仅打印一行提示）；
