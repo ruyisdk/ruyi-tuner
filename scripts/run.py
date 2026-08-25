@@ -14,7 +14,7 @@ sys.path.append(project_root)
 # scripts/ 目录, 保证从任意工作目录运行时都能 import utils
 sys.path.insert(0, os.path.dirname(current_file_path))
 from utils.GA import LeverageSyner_GA_codesize
-from utils.common import get_inst_count_method
+from utils.common import get_inst_count_method, check_dataset_arch_matches_opt
 
 parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
@@ -38,6 +38,9 @@ elif os.path.isfile(args.dataset) and args.dataset.endswith(".ll"):
     filenames = [args.dataset]
 else:
     raise ValueError("The dataset argument must be a directory containing .ll files or a specific .ll file.")
+
+# 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
+check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.llvm_tools_path, 'opt'))
 
 all = []
 

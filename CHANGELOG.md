@@ -48,4 +48,5 @@
 - 将Readme中的版本变更记录拆分为独立的CHANGELOG.md，并按独立文件重新分级标题层级；Readme的版本章节改为指向CHANGELOG.md的链接，并注明新增条目追加到最新版本段；
 - Readme细节更新：精简标题tagline；项目结构树修正（README.md改为Readme.md、去除根目录不存在的passes_XXX.txt条目、新增CHANGELOG.md）；训练示例的passfile路径改为passes_examples/passes_2210-gen.txt；环境要求补充pandas安装命令与RUYITUNER_SHOW_OPT_FAILURES环境变量说明；--num_workers描述改为"并行工作线程数"；项目简介按主题拆分段落并加粗关键词；
 - Readme新增"注意事项"小节：小数据集上-Os/-Oz基线可能相同需更大真实程序、.ll文件需内嵌target triple且不带optnone（否则opt跳过pass）、RISC-V数据集需搭配面向RISC-V的交叉编译工具链opt；
-- 使用方法补充细节说明：训练阶段补充协同对的发现过程（单Pass筛选+两两配对）、优化阶段补充GA算法简介/整体优化过程/评分标准与真实输出示例。
+- 使用方法补充细节说明：训练阶段补充协同对的发现过程（单Pass筛选+两两配对）、优化阶段补充GA算法简介/整体优化过程/评分标准与真实输出示例；
+- 新增架构一致性校验：utils/common.py中check_dataset_arch_matches_opt在训练/优化前校验数据集.ll文件内嵌target triple的架构与opt默认目标架构一致（train.py/run.py均已接入），防止用x86目标架构的opt处理riscv数据（反之亦然）；文件缺失triple或架构不匹配时直接报错退出；

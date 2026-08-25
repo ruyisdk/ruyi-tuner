@@ -33,7 +33,7 @@ sys.path.append(project_root)
 sys.path.insert(0, os.path.dirname(current_file_path))
 
 from utils.PassSyner import PassSyner
-from utils.common import get_inst_count, get_inst_count_method
+from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt
 
 # ============================================================================
 # pass 列表生成
@@ -320,6 +320,14 @@ if args.passfile:
 else:
     # 未提供 --passfile 时自动生成 pass 列表(默认不写文件), 然后继续训练
     passlist = generate_passlist(args, write_default=False)
+
+# 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
+dataset_files = []
+for root, _, files in os.walk(args.dataset):
+    for f in files:
+        if f.endswith('.ll'):
+            dataset_files.append(os.path.join(root, f))
+check_dataset_arch_matches_opt(dataset_files, os.path.join(args.llvm_tools_path, 'opt'))
 
 syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
