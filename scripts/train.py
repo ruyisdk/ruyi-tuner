@@ -265,14 +265,18 @@ def generate_passlist(args, write_default=True):
         print(f'\n生成完成: {out_path} (共 {len(lines)} 个 pass)')
     else:
         print(f'\n生成完成: 共 {len(lines)} 个 pass (未写文件, 仅用于本次训练)')
-    if dropped:
-        print(f'\n因 opt 运行失败剔除 {len(dropped)} 个:')
-        for name, reason in dropped:
-            print(f'  - {name}: {reason}')
-    if parse_dropped:
-        print(f'\n因输出 IR 检查失败剔除 {len(parse_dropped)} 个:')
-        for name, reason in parse_dropped:
-            print(f'  - {name}: {reason}')
+    # 被剔除 pass 的具体清单与原因默认不打印, 避免输出过长;
+    # 设置环境变量 RUYITUNER_SHOW_EXCLUDED_PASSES=1 可恢复逐条输出
+    show_excluded = os.environ.get('RUYITUNER_SHOW_EXCLUDED_PASSES') == '1'
+    for label, dropped_items in (('opt 运行失败', dropped), ('输出 IR 检查失败', parse_dropped)):
+        if not dropped_items:
+            continue
+        if show_excluded:
+            print(f'\n因{label}剔除 {len(dropped_items)} 个:')
+            for name, reason in dropped_items:
+                print(f'  - {name}: {reason}')
+        else:
+            print(f'\n因{label}剔除 {len(dropped_items)} 个 (设置 RUYITUNER_SHOW_EXCLUDED_PASSES=1 查看具体清单与原因)')
     print('\n成功生成pass列表！')
     return lines
 
