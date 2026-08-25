@@ -191,6 +191,9 @@ Mean:  0.06032388663967611
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（生成时加 `-Xclang -disable-O0-optnone`）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
 - 训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链中的 opt（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 
+## 参考文献
+
+- Haolin Pan, Yuanyu Wei, Mingjie Xing, Yanjun Wu, and Chen Zhao. 2025. Towards Efficient Compiler Auto-tuning: Leveraging Synergistic Search Spaces. In Proceedings of the 23rd ACM/IEEE International Symposium on Code Generation and Optimization (CGO '25). Association for Computing Machinery, New York, NY, USA, 614–627. https://doi.org/10.1145/3696443.3708961
 
 ## 版本
 
