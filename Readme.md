@@ -10,7 +10,7 @@ RuyiTuner 是一个基于 Pass 协同效应分析的 LLVM 编译优化调优工�
 
 1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step1/Step2 两级 CSV 供优化阶段使用。
 
-2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、得分与平均分。
+2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计，还可通过 `--count_mode obj-size` 切换为 .o 文件 .text 段字节大小统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
@@ -160,7 +160,11 @@ python3 train.py \
 
 **整体优化过程：** 以 Step2 中的协同对为有向边构建搜索图（节点是 Pass，边表示"先 A 后 B"的协同关系）；初始种群在图中随机游走生成长度不超过 2 的序列，之后通过多代交叉与变异不断进化。每个个体都会被真正执行一遍（`opt -passes=<序列>`）并按指令数打分。对数据集中的每个 .ll 文件独立运行一次 GA，输出该文件的最优 Pass 序列与得分。
 
-**评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数；得分 = (基线指令数 - GA序列优化后指令数) / 基线指令数。得分为正表示 GA 序列比基线更短（有效改进，例如 0.1 表示再少 10%）；得分为 0 表示与基线持平；得分 1.0 属于异常（模块被清空，通常是 internalize 类 pass 导致）。最终打印每个文件的最优序列、得分，以及所有正分文件的平均分。
+**评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数（`--count_mode obj-size` 下为 .o 文件的 .text 段字节大小）；每个文件的 Code Size Reduction Rate = (基线 - GA序列优化后) / 基线。Code Size Reduction Rate 为正表示 GA 序列比基线更短（有效改进，例如 10% 表示再少 10%）；为 0 表示与基线持平；最优个体为负时不输出（负值与比基线更差的路径没有意义，按无收益记 0%）；为 100% 属于异常（模块被清空，通常是 internalize 类 pass 导致）。Mean Reduction Rate 是所有文件按大小加权汇总的整体平均缩减率：
+
+$$\text{Mean Reduction Rate} = \frac{\sum\text{所有文件基线} - \sum\text{所有文件优化后}}{\sum\text{所有文件基线}}$$
+
+Code Size Reduction Rate 为 0 的文件同样计入分母、分子贡献为 0，因此会拉低 Mean Reduction Rate；基线越大的文件在 Mean Reduction Rate 中的权重越大。
 
 **使用演示：**
 
@@ -181,8 +185,8 @@ python3 run.py \
 
 **输出：**
 - 输出用于优化的Pass序列
-- 打印该序列下的优化得分
-- 输出所有文件的平均优化得分
+- 打印该序列下的 Code Size Reduction Rate
+- 输出所有文件加权汇总的 Mean Reduction Rate
 
 **输出示例：**
 

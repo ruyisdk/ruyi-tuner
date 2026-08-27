@@ -43,18 +43,21 @@ else:
 # 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
 check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.llvm_tools_path, 'opt'))
 
-all = []
+# 汇总所有文件的基线大小与优化后大小, 整体平均缩减率 = (Σ基线 - Σ优化后) / Σ基线;
+# 缩减率为0的文件同样计入分母, 会拉低整体平均缩减率
+total_baseline = 0
+total_after = 0
 
 for filename in filenames:
 
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print("Current File:", filename)  
-    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
-    # 0分文件也按统一格式输出, 平均分仍只统计正分文件; 0分时Path输出为空
-    if (score != 0):
-        all.append(score)
-    mean = sum(all) / len(all) if all else 0.0
+    path, score, baseline_count, after_count = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
+    # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
+    total_baseline += baseline_count
+    total_after += after_count
+    mean = (total_baseline - total_after) / total_baseline if total_baseline > 0 else 0.0
     print("Path: ", path if score != 0 else [])
     print("Code Size Reduction Rate: ", f"{score * 100:.2f}%")
     print("Mean Reduction Rate: ", f"{mean * 100:.2f}%")
