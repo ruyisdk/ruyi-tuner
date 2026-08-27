@@ -83,10 +83,12 @@ SECTION_HEADERS = {
 # 纯观察/调试类 pass, 对代码大小优化无意义, 直接排除
 OBSERVER_PATTERN = re.compile(r'^(print($|-|<)|dot-|view-|debugify|check-debugify)')
 
-# 插桩类 pass (sanitizer/profiling/coverage), 只会增大代码体积, 默认排除
+# 插桩类 pass (sanitizer/profiling/coverage), 只会增大代码体积, 默认排除;
+# pseudo-probe 的输出在 RISC-V 上 llc -filetype=obj 无法汇编, 也一并剔除
 INSTRUMENTATION_PATTERN = re.compile(
     r'^(asan|hwasan|msan|tsan|dfsan|nsan|rtsan|tysan|sanmd|sancov'
-    r'|pgo-|instrprof|insert-gcov-profiling|sample-profile|memprof|ctx-prof|ctx-instr)')
+    r'|pgo-|instrprof|insert-gcov-profiling|sample-profile|memprof|ctx-prof|ctx-instr'
+    r'|pseudo-probe)')
 
 # 独立运行的 internalize 会连同 main 一起 internalize, 之后清理类 pass 会把整个
 # 模块清空, 导致 GA 评分虚高为 1.0 (假胜利), 因此在生成 pass 列表时默认剔除

@@ -275,6 +275,18 @@ _OPT_LEVEL_FLAGS = ('-O0', '-O1', '-O2', '-O3', '-Os', '-Oz',
                     'default<O3>', 'default<Os>', 'default<Oz>')
 
 
+def _count_after_opt(after_ll_code, original_ir_code, llvm_tools_path, count_mode):
+    '''统计优化后 IR 的代码大小; 统计失败时回退统计原始 IR.
+
+    与 opt 崩溃时的处理一致: 特定序列的计数不可得(如 obj-size 口径下 llc 无法
+    汇编该 IR)时视为无收益, 返回原始 IR 的计数; 若原始 IR 本身也无法统计(如
+    工具链缺失), 异常继续向上抛出, 保证配置错误仍快速失败.'''
+    try:
+        return get_inst_count(after_ll_code, llvm_tools_path, count_mode=count_mode)
+    except RuntimeError:
+        return get_inst_count(original_ir_code, llvm_tools_path, count_mode=count_mode)
+
+
 def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
     #统计IR指令数，这里是做了统计指令数的集中情况的预处理，真正最终统计指令数是在get_inst_count里最终落地
     #count_mode 计数方式开关 (见 get_inst_count): 'auto' | 'opt-stats' | 'text' | 'obj-size'
@@ -295,7 +307,7 @@ def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
             cmd_opt = [opt_path] + [flag] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return get_inst_count(after_ll_code, llvm_tools_path, count_mode=count_mode)
+            return _count_after_opt(after_ll_code, ir_code, llvm_tools_path, count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code, llvm_tools_path, count_mode=count_mode)
@@ -309,7 +321,7 @@ def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
         try:
             result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return get_inst_count(after_ll_code, llvm_tools_path, count_mode=count_mode)
+            return _count_after_opt(after_ll_code, ir_code, llvm_tools_path, count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code, llvm_tools_path, count_mode=count_mode)

@@ -61,3 +61,5 @@
 - `get_inst_count` 新增 `count_mode` 参数开关：'obj-size' 方式即调用 `get_object_size` 返回 .o 字节大小；显式指定 opt-stats/obj-size 而不可用时抛 RuntimeError 快速失败，auto 保持原有 opt-stats→text 回退逻辑；
 - `get_inst_count_method` 同步支持 count_mode，train.py/run.py 启动时展示的计数方式与实际口径一致；
 - `--count_mode obj-size` 统计 .o 文件的 .text 段字节大小，要求工具链同时包含 opt、llc 与 llvm-size；Readme 补充该参数说明、四种计数方式的用法与示例；
+- train.py 的 pass 列表生成默认剔除 pseudo-probe 类插桩 pass：其输出在 RISC-V 上 llc -filetype=obj 无法汇编（.sleb128 expression is not absolute），会使 obj-size 口径的训练中断；
+- obj-size 口径下个别 IR 编译失败（llc/llvm-size 返回非 0 或解析失败）不再中断整个流程：与 opt 崩溃的处理一致，回退统计原始 IR（该序列视为无收益）；工具链本身缺失时仍直接报错快速失败；
