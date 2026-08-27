@@ -147,6 +147,10 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', c
                     next_population.append(mutate(child2, mutation_rate))
                 population = next_population
             final_fitness_scores = calculate_fitness(population)
+            # 仅在输出时加非负约束: 最优得分为负时, 负值与对应路径没有意义,
+            # 按无收益输出空路径与0分; 不改变适应度计算与选择过程
+            if final_fitness_scores[0][0] < 0:
+                return [], 0.0
             best_path = final_fitness_scores[0][1]
             best_cost = final_fitness_scores[0][0]
             return best_path, best_cost

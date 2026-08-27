@@ -64,3 +64,5 @@
 - train.py 的 pass 列表生成默认剔除 pseudo-probe 类插桩 pass：其输出在 RISC-V 上 llc -filetype=obj 无法汇编（.sleb128 expression is not absolute），会使 obj-size 口径的训练中断；
 - obj-size 口径下个别 IR 编译失败（llc/llvm-size 返回非 0 或解析失败）不再中断整个流程：与 opt 崩溃的处理一致，回退统计原始 IR（该序列视为无收益）；工具链本身缺失时仍直接报错快速失败；
 - run.py 的优化结果输出改为百分数并保留两位小数：Score 更名为英文表述 Code Size Reduction Rate，Mean 更名为 Mean Reduction Rate；Readme 输出示例同步更新；
+- GA 仅在最终输出时加非负约束：最优个体得分为负时返回空路径与 0 分（负的缩减率与比 -Oz 还差的路径没有意义）；适应度计算与选择过程保持不变；
+- 曾尝试并放弃"失败回退按 Oz 基线计分 + 选择时非负约束"方案：失败个体得 0 分后在选择阶段反超负分个体、抢占前 10% 父代名额，种群被失败路径污染，导致 datasets/riscv/1_08.ll 的缩减率从 7.47% 降为 0%，故回退该方案，仅保留输出时的非负约束；
