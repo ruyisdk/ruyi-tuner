@@ -56,7 +56,7 @@ for filename in filenames:
         all.append(score)
     mean = sum(all) / len(all) if all else 0.0
     print("Path: ", path if score != 0 else [])
-    print("Score: ", score)
-    print("Mean: ", mean)
+    print("Code Size Reduction Rate: ", f"{score * 100:.2f}%")
+    print("Mean Reduction Rate: ", f"{mean * 100:.2f}%")
     print()
 

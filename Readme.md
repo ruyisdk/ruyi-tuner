@@ -189,8 +189,8 @@ python3 run.py \
 ```text
 Current File: datasets/x86/1_24.ll
 Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
-Score:  0.015384615384615385
-Mean:  0.06032388663967611
+Code Size Reduction Rate:  1.54%
+Mean Reduction Rate:  6.03%
 ```
 
 

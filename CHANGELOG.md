@@ -63,3 +63,4 @@
 - `--count_mode obj-size` 统计 .o 文件的 .text 段字节大小，要求工具链同时包含 opt、llc 与 llvm-size；Readme 补充该参数说明、四种计数方式的用法与示例；
 - train.py 的 pass 列表生成默认剔除 pseudo-probe 类插桩 pass：其输出在 RISC-V 上 llc -filetype=obj 无法汇编（.sleb128 expression is not absolute），会使 obj-size 口径的训练中断；
 - obj-size 口径下个别 IR 编译失败（llc/llvm-size 返回非 0 或解析失败）不再中断整个流程：与 opt 崩溃的处理一致，回退统计原始 IR（该序列视为无收益）；工具链本身缺失时仍直接报错快速失败；
+- run.py 的优化结果输出改为百分数并保留两位小数：Score 更名为英文表述 Code Size Reduction Rate，Mean 更名为 Mean Reduction Rate；Readme 输出示例同步更新；
