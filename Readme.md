@@ -12,7 +12,7 @@ RuyiTuner 是一个基于 Pass 协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、得分与平均分。
 
-**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
+**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计，还可通过 `--count_mode obj-size` 切换为 .o 文件 .text 段字节大小统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
 **使用方式**：输入为包含 .ll 文件的数据集目录与 LLVM 工具链路径（opt）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
 
@@ -48,7 +48,7 @@ RuyiTuner 是一个基于 Pass 协同效应分析的 LLVM 编译优化调优工�
 - LLVM 工具链
   - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
   - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
-  - RuyiTuner 只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间。
+  - RuyiTuner 默认只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间；使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）时还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
 - 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。
 - 环境变量（可选）：生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
 
@@ -78,6 +78,12 @@ python3 ruyituner.py \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
     --paircsv ./output/Step2_EnumeratedPairs.csv
+
+# 用 .o 文件字节大小作为评分口径（要求工具链同时包含opt与llc）
+python3 ruyituner.py \
+    --dataset ./datasets/x86 \
+    --llvm_tools_path /llvm_dir/build/bin \
+    --count_mode obj-size
 ```
 
 **参数说明：**
@@ -88,6 +94,7 @@ python3 ruyituner.py \
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -139,6 +146,7 @@ python3 train.py \
 - `--keep_instrumentation`: (可选) 保留插桩类pass（asan/tsan/pgo-*等，默认剔除）
 - `--extra_exclude`: (可选) 额外的pass排除规则（正则表达式）
 - `--num_workers`: (可选) 并行工作线程数，默认16
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
 
 **输出文件：**
 - `Step1_FindSynerPairs.csv`: 发现的协同Pass对（写入时已过滤掉空列表行）
@@ -169,6 +177,7 @@ python3 run.py \
 - `--llvm_tools_path`: LLVM工具链路径
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
 
 **输出：**
 - 输出用于优化的Pass序列
@@ -184,6 +193,17 @@ Score:  0.015384615384615385
 Mean:  0.06032388663967611
 ```
 
+
+### 4. 指令计数方式（--count_mode）
+
+train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，默认 `auto`），控制训练与优化阶段用哪种口径统计代码大小：
+
+- `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
+- `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
+- `text`：强制按 IR 文本缩进规律统计指令行数；
+- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）。
+
+四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`），任一缺失或编译/解析失败时直接报错。
 
 ## 注意事项
 

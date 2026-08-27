@@ -2,9 +2,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from utils.common import get_instrcount
 
-def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
+def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto'):
         import random
-        Oz = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path)
+        Oz = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
         # print("Oz: ", Oz)
         if(Oz == 0):
             print("file", ll_code, ": Oz is 0!\n")
@@ -61,7 +61,7 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
 
         # 计算适应度
         def fitness_function(path):
-            score = (Oz - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path)) / Oz
+            score = (Oz - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path, count_mode=count_mode)) / Oz
             return score, path
 
         def calculate_fitness(population):

@@ -35,7 +35,8 @@ def build_train_cmd(args):
     cmd = [sys.executable, TRAIN_SCRIPT,
            '--dataset', args.dataset,
            '--llvm_tools_path', args.llvm_tools_path,
-           '--num_workers', str(args.num_workers)]
+           '--num_workers', str(args.num_workers),
+           '--count_mode', args.count_mode]
     if args.output_dir is not None:
         cmd += ['--output_dir', args.output_dir]
     if args.passfile is not None:
@@ -68,6 +69,9 @@ def main():
     parser.add_argument('--opt-level', type=str, default='Oz',
                         choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
                         help='GA 基线评分的优化等级, 默认 Oz (传给 run.py)')
+    parser.add_argument('--count_mode', type=str, default='auto',
+                        choices=['auto', 'opt-stats', 'text', 'obj-size'],
+                        help='指令计数方式开关 (传给 train.py 与 run.py): auto(默认) | opt-stats | text | obj-size')
     parser.add_argument('--passlist_output', type=str, default=None,
                         help='把自动生成的 pass 列表写入该文件 (传给 train.py)')
     parser.add_argument('--no_parse_check', action='store_true',
@@ -108,7 +112,8 @@ def main():
                    '--dataset', args.dataset,
                    '--llvm_tools_path', args.llvm_tools_path,
                    '--paircsv', paircsv,
-                   '--opt-level', args.opt_level]
+                   '--opt-level', args.opt_level,
+                   '--count_mode', args.count_mode]
         print('=' * 60)
         print(f'[ruyituner] 阶段 2/2: GA 优化 (协同对: {paircsv})')
         print('=' * 60)

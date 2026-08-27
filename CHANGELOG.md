@@ -54,3 +54,10 @@
 - 项目简介的使用方式中补充输入输出说明，并添加指向使用说明的跳转链接；
 - scripts/run.py中0分文件的输出改为与正分文件相同的格式（统一输出Path/Score/Mean三行，0分时Path输出为空；Mean仍只统计正分文件、正分文件为空时记0.0；此前0分文件仅打印一行提示）；
 - train.py生成pass列表时，被剔除pass的具体清单与原因默认不打印（仅输出剔除数量），设置环境变量`RUYITUNER_SHOW_EXCLUDED_PASSES=1`可恢复逐条输出；Readme`环境要求`同步补充该环境变量说明；
+
+### 1.6版本变更
+- 新增 `--count_mode` 参数（可选，默认auto）：控制训练/优化阶段的代码大小统计口径，支持 auto/opt-stats/text/obj-size 四种取值；参数已从 ruyituner.py 一路穿透到 train.py、run.py、utils/GA.py、utils/PassSyner.py 与 utils/common.py（GA评分与协同对发现统一受控）；
+- utils/common.py 新增 `get_object_size` 函数：调用 `llc -filetype=obj` 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小（不含符号表/重定位等 ELF 结构开销；临时目录存放、用后清理；llc/llvm-size 缺失或失败返回 None）；
+- `get_inst_count` 新增 `count_mode` 参数开关：'obj-size' 方式即调用 `get_object_size` 返回 .o 字节大小；显式指定 opt-stats/obj-size 而不可用时抛 RuntimeError 快速失败，auto 保持原有 opt-stats→text 回退逻辑；
+- `get_inst_count_method` 同步支持 count_mode，train.py/run.py 启动时展示的计数方式与实际口径一致；
+- `--count_mode obj-size` 统计 .o 文件的 .text 段字节大小，要求工具链同时包含 opt、llc 与 llvm-size；Readme 补充该参数说明、四种计数方式的用法与示例；

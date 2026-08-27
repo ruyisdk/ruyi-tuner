@@ -296,6 +296,8 @@ args.add_argument("--passlist_output", type=str, default=None, help="output path
 args.add_argument("--no_parse_check", action='store_true', help="skip opt re-parse verification of pass output IR")
 args.add_argument("--keep_instrumentation", action='store_true', help="keep instrumentation passes (asan/tsan/pgo-* etc., excluded by default)")
 args.add_argument("--extra_exclude", type=str, default=None, help="extra exclude rules for the generated pass list (regex)")
+args.add_argument("--count_mode", type=str, default='auto', choices=['auto', 'opt-stats', 'text', 'obj-size'],
+                  help="instruction counting mode: auto (default) | opt-stats | text | obj-size")
 args = args.parse_args()
 
 if args.gen_passlist_only:
@@ -309,7 +311,7 @@ if args.output_dir is None:
     os.makedirs(args.output_dir, exist_ok=True)
     print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
-print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
+print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
 """
 Step 1. Find synergistic pairs and save to Step1 CSV
@@ -333,7 +335,7 @@ for root, _, files in os.walk(args.dataset):
             dataset_files.append(os.path.join(root, f))
 check_dataset_arch_matches_opt(dataset_files, os.path.join(args.llvm_tools_path, 'opt'))
 
-syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers)
+syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
 syner.FindSynerPasses(output_file)
 print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv (rows with empty lists are skipped)")

@@ -21,10 +21,11 @@ parser.add_argument("--dataset", type=str, required=True, help="the directory co
 parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
 parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
+parser.add_argument("--count_mode", type=str, default="auto", choices=["auto", "opt-stats", "text", "obj-size"], help="instruction counting mode for scoring (default: auto)")
 
 args = parser.parse_args()
 
-print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
+print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
 df = pd.read_csv(args.paircsv)
 pairlist= df["synerpair"].tolist()
@@ -49,7 +50,7 @@ for filename in filenames:
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print("Current File:", filename)  
-    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level)
+    path, score = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
     # 0分文件也按统一格式输出, 平均分仍只统计正分文件; 0分时Path输出为空
     if (score != 0):
         all.append(score)
