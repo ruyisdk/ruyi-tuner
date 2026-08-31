@@ -1,8 +1,18 @@
 # RuyiTuner 版本变更记录
 
-## 1.0版本位于分支v1.0上；
+## 1.0版本
 
-## 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发。
+- 1.0版本位于分支v1.0上；
+- lib目录下只有一个libAutophase_21_1_8.so；它是在utils/common.py中去调用的，用来计算指令数的；
+- utils下边有三个common.py、GA.py、PassSyner.py三个脚本文件；scripts目录下有train.py和run.py，这是这个工具的主要两个阶段执行的命令，它们会调用utils下边的三个脚本；
+- train.py是为了寻找pass序列对，文件里的内容，主要是处理参数和写文件，核心的函数是syner.FindSynerPasses(output_file)，具体实现是位于utils/PassSyner.py中；
+- run.py是使用遗传算法根据优化序列对，去做最终的优化，找到优化序列；核心函数LeverageSyner_GA_codesize()是在utils/GA.py中；
+- 6.utils/common.py文件包含了公用工具函数get_inst_count、fix_loop_nesting和get_instrcount；get_inst_count函数中用到了lib目录下唯一的一个libAutophase_21_1_8.so；
+- passes.txt中的pass序列是通过Opt print-passes选项输出之后，进行手工筛选了之后的内容。
+
+## 1.x版本
+- 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发；
+- 1.x系列的所有版本，按照小小版本号来记录变更日志。
 
 ### 1.1版本变更
 - datasets下的.ll测试文件，都是x86架构的，将它们移动到datasets/x86下；
