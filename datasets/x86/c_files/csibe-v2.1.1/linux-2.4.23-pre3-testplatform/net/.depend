@@ -1,0 +1,120 @@
+netsyms.o: netsyms.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/types.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/net.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/in.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/inetdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/fddidevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/trdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/fcdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/ioport.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/tty.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/ethtool.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/neighbour.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/snmp.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/dst.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/checksum.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/etherdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/route.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/hippi.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/hippidevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/pkt_sched.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/scm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/if_bridge.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/if_vlan.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/random.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/divert.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/divert.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/inet.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/ip.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/protocol.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/arp.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/atm/clip.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/atm/clip/module.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/atmclip.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/ip.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/udp.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/tcp.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/icmp.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/inet_common.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/inet.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mroute.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/igmp.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/ipv6.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/ipv6/module.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/khttpd.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/khttpd/module.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/in6.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/icmpv6.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/ipv6.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/ndisc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/transp_v6.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/addrconf.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/rtnetlink.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/ipx/module.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/atalk/module.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/sock.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/sysctl.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/filter.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/arpd.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/vlan/8021q.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/vlan/8021q/module.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/bridge.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/bridge/module.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/dlci/module.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/ip6_route.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/netfilter.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/netlink/dev.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/netlink/dev/module.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/tr.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/fddi.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/kmod.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/hw/flowcontrol.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/fastroute.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/sched.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/estimator.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/cls/police.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/cls.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netfilter.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netfilter_ipv4.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/radio.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net/pcmcia/radio.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/iw_handler.h
+socket.o: socket.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/socket.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/net.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/interrupt.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netdevice.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/proc_fs.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/wanrouter.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netlink.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/rtnetlink.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/poll.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/cache.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/kmod.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net.h) \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kmod.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/sock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/net/scm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/netfilter.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/smp.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/wan/router.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/bluez.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/netlink/dev.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/netfilter.h)
+sysctl_net.o: sysctl_net.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/sysctl.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/inet.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/net.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/ipv6.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/tr.h)

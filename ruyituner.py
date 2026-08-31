@@ -9,13 +9,13 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
 
 用法示例:
   # 完整流程 (训练 + 优化)
-  python3 ruyituner.py --dataset datasets/x86 --llvm_tools_path ../llvm_dir/build/bin
+  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin
 
   # 仅训练 (不优化)
-  python3 ruyituner.py --dataset datasets/x86 --llvm_tools_path ../llvm_dir/build/bin --only_train
+  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
 
   # 仅优化 (需要已有 Step2_EnumeratedPairs.csv)
-  python3 ruyituner.py --dataset datasets/x86 --llvm_tools_path ../llvm_dir/build/bin --only_run \
+  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step2_EnumeratedPairs.csv
 """
 
@@ -57,7 +57,10 @@ def main():
         description='ruyituner: 一键完成训练(train.py)与优化(run.py)',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dataset', type=str, required=True,
-                        help='包含 .ll 文件的数据集目录 (训练与优化共用)')
+                        help='数据集目录 (训练与优化共用)')
+    parser.add_argument('--input_type', type=str, required=True,
+                        choices=['ll', 'c'],
+                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (处理路径待定)')
     parser.add_argument('--llvm_tools_path', type=str, required=True,
                         help='LLVM工具链路径，包含opt')
     parser.add_argument('--output_dir', type=str, default=None,
@@ -90,6 +93,14 @@ def main():
 
     if args.only_train and args.only_run:
         parser.error('--only_train 与 --only_run 不能同时使用')
+
+    print('=' * 60)
+    print(f'[ruyituner] 输入文件类型: {args.input_type}')
+    print('=' * 60)
+
+    if args.input_type == 'c':
+        print('[ruyituner] c 类型输入的处理路径尚未实现 (待定), 当前仅支持 ll.')
+        sys.exit(1)
 
     out_dir = args.output_dir or DEFAULT_OUTPUT_DIR
 

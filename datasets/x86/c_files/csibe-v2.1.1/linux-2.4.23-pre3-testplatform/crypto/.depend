@@ -1,0 +1,167 @@
+aes.o: aes.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/types.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+api.o: api.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/rwsem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   internal.h
+autoload.o: autoload.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kmod.h \
+   internal.h
+blowfish.o: blowfish.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h
+cast5.o: cast5.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h
+cipher.o: cipher.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   internal.h
+compress.o: compress.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/types.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   internal.h
+crypto_null.o: crypto_null.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h
+deflate.o: deflate.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/zlib.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/vmalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/interrupt.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/net.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h
+des.o: des.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h
+digest.o: digest.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   internal.h
+hmac.o: hmac.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   internal.h
+internal.h: \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/hardirq.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/softirq.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/kmod.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/crypto/hmac.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/proc/fs.h)
+	@touch internal.h
+md4.o: md4.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+md5.o: md5.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+proc.o: proc.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/rwsem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/proc_fs.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/seq_file.h \
+   internal.h
+serpent.o: serpent.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h
+sha1.o: sha1.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+sha256.o: sha256.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+sha512.o: sha512.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/byteorder.h
+tcrypt.o: tcrypt.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/scatterlist.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   tcrypt.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/crypto/hmac.h)
+tcrypt.h: \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/crypto/hmac.h)
+	@touch tcrypt.h
+twofish.o: twofish.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/types.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/errno.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/crypto.h
+.PRECIOUS:	internal.h \
+	tcrypt.h \
+

@@ -1,0 +1,75 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+EXTLIBS = ../air/libair.a
+LIBS = libhest.a $(EXTLIBS)
+
+OBJS = defaultsHest.o methodsHest.o usage.o parseHest.o
+TESTS = test/ex0 test/ex1 test/ex2 test/ex3 test/ex4 test/ex5 \
+	test/strings test/bday
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libhest.a: $(OBJS)
+	$(AR) $@ $^
+
+$(EXTLIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+test/ex0: test/ex0.o $(LIBS)
+test/ex1: test/ex1.o $(LIBS)
+test/ex2: test/ex2.o $(LIBS)
+test/ex3: test/ex3.o $(LIBS)
+test/ex4: test/ex4.o $(LIBS)
+test/ex5: test/ex5.o $(LIBS)
+test/strings: test/strings.o $(LIBS)
+test/bday: test/bday.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libhest.a

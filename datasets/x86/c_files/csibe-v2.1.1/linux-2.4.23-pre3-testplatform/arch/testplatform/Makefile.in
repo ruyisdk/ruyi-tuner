@@ -1,0 +1,87 @@
+# s390/Makefile
+#
+# This file is included by the global makefile so that you can add your own
+# architecture-specific flags and dependencies. Remember to do have actions
+# for "archclean" and "archdep" for cleaning up and making dependencies for
+# this architecture
+#
+# This file is subject to the terms and conditions of the GNU General Public
+# License.  See the file "COPYING" in the main directory of this archive
+# for more details.
+#
+# Copyright (C) 1994 by Linus Torvalds
+#
+
+#VPATH := @CSiBE-SRCDIR@
+LD     = @CSiBE-LD@
+CPP    = @CSiBE-CPP@
+OBJCOPY= @CSiBE-OBJCOPY@ -O binary -R .note -R .comment -S
+LDFLAGS=-e start # if enabled, needed vmlinux.lds also!
+LINKFLAGS =-T $(TOPDIR)/arch/testplatform/vmlinux.lds $(LDFLAGS)
+
+
+CFLAGS_PIPE := -pipe
+CFLAGS_NSR  := -fno-strength-reduce
+CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
+
+HEAD := arch/testplatform/kernel/head.o arch/testplatform/kernel/init_task.o
+
+SUBDIRS := $(SUBDIRS) arch/testplatform/mm arch/testplatform/kernel \
+           arch/testplatform/lib
+CORE_FILES := arch/testplatform/mm/mm.o arch/testplatform/kernel/kernel.o $(CORE_FILES)
+LIBS := $(TOPDIR)/arch/testplatform/lib/lib.a $(LIBS) $(TOPDIR)/arch/testplatform/lib/lib.a
+
+all: image listing
+
+listing: vmlinux
+	@$(MAKEBOOT) listing
+
+arch/testplatform/kernel: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/testplatform/kernel
+
+arch/testplatform/mm: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/testplatform/mm
+
+#drivers/s390: dummy
+#	$(MAKE) linuxsubdirs SUBDIRS=drivers/s390
+
+MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+
+image: vmlinux 
+	@$(MAKEBOOT) image
+
+install: vmlinux
+	@$(MAKEBOOT) BOOTIMAGE=image install
+
+archclean:
+	#@$(MAKEBOOT) clean
+	$(MAKE) -C arch/$(ARCH)/kernel clean
+
+archmrproper:
+
+archdep:
+	@$(MAKEBOOT) dep
+
+#CSiBE
+
+NCO = fs/jbd/jbd.o fs/nfs/nfs.o fs/ext3/ext3.o fs/nfsd/nfsd.o fs/lockd/lockd.o \
+    fs/ramfs/ramfs.o fs/partitions/partitions.o fs/fs.o mm/mm.o ipc/ipc.o \
+    lib/zlib_inflate/zlib_inflate.o lib/zlib_deflate/zlib_deflate.o net/802/802.o \
+    net/core/core.o net/ipv4/ipv4.o net/8021q/8021q.o net/sched/sched.o \
+    net/ethernet/ethernet.o net/netlink/netlink.o net/sunrpc/sunrpc.o net/network.o \
+    arch/testplatform/mm/mm.o arch/testplatform/kernel/kernel.o drivers/net/net.o \
+    drivers/char/char.o drivers/block/block.o drivers/media/media.o kernel/kernel.o
+
+NOT_COMPILED_OBJECTS := $(addprefix $(TOPDIR)/,$(NCO))
+
+objs: vmlinuxdeps
+	rm -f `find $(TOPDIR)/scripts -name '*.o'` `find $(TOPDIR)/scripts -name '*.time'`
+	rm -f $(NOT_COMPILED_OBJECTS)
+
+run:
+
+comp:
+
+clean-comp:
+
+clean: clean-comp

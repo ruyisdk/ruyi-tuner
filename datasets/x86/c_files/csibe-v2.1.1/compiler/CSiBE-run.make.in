@@ -1,0 +1,22 @@
+run: vam.fact.run vam.fib.run vam.test2.run
+
+vam.fact.run: vam
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -t $(VPATH)/fact.vam >fact.vam.trc ; \
+	done
+	$(RM) fact.vam.trc
+
+vam.fib.run: vam
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -t $(VPATH)/fib.vam >fib.vam.trc ; \
+	done
+	$(RM) fib.vam.trc
+
+vam.test2.run: vam
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -t $(VPATH)/test2.vam >test2.vam.trc ; \
+	done
+	$(RM) test2.vam.trc

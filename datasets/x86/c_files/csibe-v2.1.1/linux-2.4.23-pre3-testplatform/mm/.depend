@@ -1,0 +1,195 @@
+bootmem.o: bootmem.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/interrupt.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/bootmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mmzone.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/dma.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/io.h
+filemap.o: filemap.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/locks.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/blkdev.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/iobuf.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h
+highmem.o: highmem.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h
+memory.o: memory.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/iobuf.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/tlb.h
+mlock.o: mlock.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+mmap.o: mmap.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/fs.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/personality.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h
+mprotect.o: mprotect.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+mremap.o: mremap.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mman.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h
+numa.o: numa.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/bootmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mmzone.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/spinlock.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/discontigmem.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/numa.h)
+oom_kill.o: oom_kill.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/sched.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/timex.h
+page_alloc.o: page_alloc.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/interrupt.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/bootmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/discontigmem.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/highmem.h)
+page_io.o: page_io.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/locks.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+shmem.o: shmem.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/devfs_fs_kernel.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/fs.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/locks.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/div64.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/tmpfs.h)
+slab.o: slab.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/interrupt.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/compiler.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/seq_file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/debug/slab.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/smp.h) \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/proc/fs.h)
+swap.o: swap.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/dma.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+swapfile.o: swapfile.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/blkdev.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/vmalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/shm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+swap_state.o: swap_state.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/mm.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgtable.h
+vmalloc.o: vmalloc.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/vmalloc.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/spinlock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h
+vmscan.o: vmscan.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/slab.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/kernel_stat.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/swapctl.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/smp_lock.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/highmem.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/file.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/pgalloc.h \
+   $(wildcard @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/config/quota.h)

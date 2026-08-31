@@ -1,0 +1,6 @@
+
+
+all objs prgs comp run clean clean-comp:
+	$(MAKE) -C libmpeg2 $@
+	$(MAKE) -C libvo $@
+	$(MAKE) -C src $@

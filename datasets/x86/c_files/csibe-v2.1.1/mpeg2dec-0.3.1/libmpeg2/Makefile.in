@@ -1,0 +1,45 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+OBJS = alloc.o cpu_accel.o header.o decode.o cpu_state.o \
+       slice.o motion_comp_mmx.o idct_mmx.o \
+       motion_comp_altivec.o idct_altivec.o \
+       motion_comp_alpha.o idct_alpha.o \
+       motion_comp_mlib.o idct_mlib.o \
+       motion_comp.o idct.o
+
+CFLAGS = $(CCOPT) -I$(VPATH) -I$(VPATH)/../include -I$(VPATH)/../../include -I. -I../include -I../../include -w
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs:
+
+comp:
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libmpeg2.a: $(OBJS)
+	$(AR) $@ $^
+
+clean-comp:
+
+clean:
+	rm -f $(OBJS) libmpeg2.a

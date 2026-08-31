@@ -1,0 +1,69 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+EXTLIBS = ../limn/liblimn.a ../ell/libell.a ../nrrd/libnrrd.a ../biff/libbiff.a ../air/libair.a
+LIBS = libecho.a $(EXTLIBS)
+
+OBJS = enumsEcho.o methodsEcho.o objmethods.o bounds.o set.o model.o \
+	matter.o renderEcho.o intx.o sqd.o list.o color.o lightEcho.o
+TESTS = test/test test/trend
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libecho.a: $(OBJS)
+	$(AR) $@ $^
+
+$(EXTLIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+test/test: test/test.o $(LIBS)
+test/trend: test/trend.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libecho.a

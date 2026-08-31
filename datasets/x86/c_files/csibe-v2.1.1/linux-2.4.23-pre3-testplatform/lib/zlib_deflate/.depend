@@ -1,0 +1,11 @@
+deflate.o: deflate.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/zutil.h \
+   defutil.h
+deflate_syms.o: deflate_syms.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/zlib.h
+deftree.o: deftree.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/zutil.h \
+   defutil.h

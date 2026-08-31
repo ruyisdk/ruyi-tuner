@@ -1,0 +1,9 @@
+TESTFILES=../testdata/CSiBE.lex
+
+run: flex.run
+
+flex.run: flex
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -Cem $(TESTFILES) ; \
+	done

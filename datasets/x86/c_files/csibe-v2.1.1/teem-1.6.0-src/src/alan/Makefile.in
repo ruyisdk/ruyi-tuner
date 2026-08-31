@@ -1,0 +1,67 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+EXTLIBS = ../nrrd/libnrrd.a ../biff/libbiff.a ../air/libair.a
+LIBS = libalan.a $(EXTLIBS)
+
+OBJS = methodsAlan.o enumsAlan.o coreAlan.o 
+TESTS = test/tspot
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libalan.a: $(OBJS)
+	$(AR) $@ $^
+
+$(EXTLIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+test/tspot: test/tspot.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libalan.a

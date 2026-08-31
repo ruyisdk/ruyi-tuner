@@ -1,0 +1,8 @@
+inode.o: inode.c \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/module.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/fs.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/pagemap.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/init.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/string.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/linux/locks.h \
+   @CSiBE-CONFIGROOT@/linux-2.4.23-pre3-testplatform/include/asm/uaccess.h

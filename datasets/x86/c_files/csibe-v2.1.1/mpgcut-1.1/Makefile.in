@@ -1,0 +1,52 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS=$(CCOPT) -w
+
+OBJS= mpgcut.o
+
+PROGS=mpgcut
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+mpgcut: $(OBJS)
+	$(LD) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(PROGS)
+

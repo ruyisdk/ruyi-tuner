@@ -1,0 +1,47 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS := $(CCOPT) -fno-builtin -I$(VPATH)/include -Iinclude -D__IO_NEAR -D__io= -w
+OBJS := arp.o ethernet.o icmp.o ip.o system.o tcp.o timers.o udp.o \
+        bootp/bootp.o \
+        demo/main_demo.o demo/tcp_client_demo.o demo/tcp_server_demo.o demo/udp_demo.o \
+        dhcp/dhcpc.o \
+        dns/dns.o \
+        http/http_server.o http/https_callbacks.o \
+        pop3/pop3_client.o pop3/pop3c_callbacks.o \
+        smtp/smtp_client.o smtp/smtpc_callbacks.o \
+        tftp/tftps.o
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p bootp demo dhcp dns http pop3 smtp tftp
+
+objs: dirs $(OBJS)
+
+prgs:
+
+comp:
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+
+clean: 
+	rm -f $(OBJS) 

@@ -1,0 +1,83 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS=$(CCOPT) -fno-builtin -w
+LWIPDIR=../../src
+
+COREFILES=$(LWIPDIR)/core/mem.i $(LWIPDIR)/core/memp.i $(LWIPDIR)/core/netif.i \
+	$(LWIPDIR)/core/pbuf.i $(LWIPDIR)/core/stats.i $(LWIPDIR)/core/sys.i \
+        $(LWIPDIR)/core/tcp.i $(LWIPDIR)/core/tcp_input.i \
+        $(LWIPDIR)/core/tcp_output.i $(LWIPDIR)/core/udp.i 
+
+CORE4FILES=$(LWIPDIR)/core/ipv4/icmp.i $(LWIPDIR)/core/ipv4/ip.i \
+	$(LWIPDIR)/core/inet.i $(LWIPDIR)/core/ipv4/ip_addr.i
+
+APIFILES=$(LWIPDIR)/api/api_lib.i $(LWIPDIR)/api/api_msg.i $(LWIPDIR)/api/tcpip.i \
+	$(LWIPDIR)/api/err.i $(LWIPDIR)/api/sockets.i 
+
+NETIFFILES=$(LWIPDIR)/netif/loopif.i \
+	$(LWIPDIR)/netif/tcpdump.i $(LWIPDIR)/netif/arp.i
+
+APPFILES=apps/fs.i apps/httpd.i \
+	apps/udpecho.i apps/tcpecho.i \
+	apps/shell.i 
+
+LWIPFILES=$(COREFILES) $(CORE4FILES) $(APIFILES) $(NETIFFILES)
+LWIPFILESW=$(wildcard $(LWIPFILES))
+LWIPOBJS=$(LWIPFILESW:.i=.o)
+
+APPOBJS=$(APPFILES:.i=.o)
+
+OBJS=simhost.o \
+    simrouter.o \
+    simnode.o \
+    $(LWIPDIR)/core/mem.o $(LWIPDIR)/core/memp.o $(LWIPDIR)/core/netif.o \
+    $(LWIPDIR)/core/pbuf.o $(LWIPDIR)/core/stats.o $(LWIPDIR)/core/sys.o \
+    $(LWIPDIR)/core/tcp.o $(LWIPDIR)/core/tcp_input.o \
+    $(LWIPDIR)/core/tcp_output.o $(LWIPDIR)/core/udp.o \
+    $(LWIPDIR)/core/ipv4/icmp.o $(LWIPDIR)/core/ipv4/ip.o \
+    $(LWIPDIR)/core/inet.o $(LWIPDIR)/core/ipv4/ip_addr.o \
+    $(LWIPDIR)/api/api_lib.o $(LWIPDIR)/api/api_msg.o $(LWIPDIR)/api/tcpip.o \
+    $(LWIPDIR)/api/err.o $(LWIPDIR)/api/sockets.o \
+    $(LWIPDIR)/netif/loopif.o \
+    $(LWIPDIR)/netif/tcpdump.o $(LWIPDIR)/netif/arp.o \
+    apps/fs.o apps/httpd.o \
+    apps/udpecho.o apps/tcpecho.o \
+    apps/shell.o 
+
+.SUFFIXES:
+.SUFFIXES: .i .o
+
+all:
+
+.i.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+	    $(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p $(LWIPDIR)/core/ipv4 $(LWIPDIR)/api $(LWIPDIR)/netif apps
+
+objs: dirs $(OBJS)
+
+prgs:
+
+comp:
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+
+clean:
+	rm -f $(OBJS)

@@ -1,0 +1,31 @@
+TESTDATA:= ../testdata
+
+run: bzip2.c.run bzip2.d.run bzip2recover.run
+	$(RM) CSiBE.ref CSiBE.bz2
+
+bzip2.c.run: bzip2 CSiBE.ref
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -kzf CSiBE.ref $(VPATH)/sample[123].ref; \
+	done
+	$(RM) sample[123].ref.bz2
+
+bzip2.d.run: bzip2 CSiBE.bz2
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -kdf CSiBE.bz2 $(VPATH)/sample[123].bz2 ; \
+	done
+	$(RM) sample[123]
+
+bzip2recover.run: bzip2recover CSiBE.bz2
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME)  ${RUNSIM} ./$< CSiBE.bz2 ; \
+		$(RM) rec*CSiBE.bz2 ; \
+	done
+
+CSiBE.ref:
+	cp $(TESTDATA)/$@ .
+
+CSiBE.bz2:
+	cp $(TESTDATA)/$@ .

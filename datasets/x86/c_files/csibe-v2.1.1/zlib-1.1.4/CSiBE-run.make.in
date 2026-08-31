@@ -1,0 +1,17 @@
+TESTDATA=../testdata
+
+run: minigzip.run minigzip0.run
+
+minigzip.run: minigzip
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< <$(TESTDATA)/CSiBE.ref >CSiBE.mgz ; \
+	done
+	$(RM) CSiBE.mgz
+
+minigzip0.run: minigzip
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< <$(TESTDATA)/CSiBE0.hex >CSiBE0.mgz ; \
+	done
+	$(RM) CSiBE.mgz

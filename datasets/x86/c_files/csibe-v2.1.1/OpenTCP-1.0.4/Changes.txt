@@ -1,0 +1,72 @@
+Recent changes:
+03.08.2003
+	OpenTCP version 1.0.4
+	- added Jari's changes to checksum calculation
+	- TCP module also modified so to improve performance with ARP cache
+	mismatches
+
+20.07.2003
+	- added Jari's modifications to ethernet.c for reading&writing
+	buffers from&to ethernet controller
+	- IOCHRDY is now handled correctly in ethernet.c
+	
+16.06.2003
+	- fixed Ethernet.c so that data direction registers are not set
+	up with #defines but with literasls.
+	
+11.06.2003
+	- fixed all possible problems with shifting (dns.c, ip.c)
+	- fixed some flaws in DHCP client 
+	
+06.06.2003
+	- fixed problem with wrong ICCxx register for Timebase-timer in
+	vectors.c
+	- improved HTTP URI parsing (decoding of % HEX HEX added and simple
+	UNICODE characters decoding - not complete though )
+	
+23.05.2003
+	OpenTCP version 1.0.3
+	- DHCP client added to OpenTCP sources.
+	
+22.05.2003
+	- fixed bug in dns.c that prevents name lookups for hosts that
+		have anything but letters in their hostnames
+	- fixed possible #include dependency problem in globalvariables.h (
+		declaration of extern structs without knowing their exact
+		structure)
+	
+12.05.2003
+	- bug in dns.c that comes up with certain buggy C compilers fixed (
+		promoting implicitly 8-bit values only to 16-bit, not 32)
+	
+29.04.2003
+	- bug with incorred checksum calculation when receiving UDP broadcast
+	  fixed
+	  
+06.04.2003
+	- fixed a bug in arp_alloc
+	
+12.03.2003
+	OpenTCP version 1.0.2
+	- several include file dependency problems solved (everything?)
+	  
+06.03.2003
+	- Jari's changes to RTL8019AS Ethernet driver added. They prevent
+	  RTL8019's blocking under heavy network traffic.
+	- Few bugs in ARP module fixed
+	
+04.03.2003
+	- Incorrect sochandle definitions in tcp.c fixed
+	- strlen bug in system.c fixed
+
+03.02.2003
+	- fixed an error with incorrect comparison in dns.c
+	- for loop in bootp.c modified slightly so it compiles with
+	  all C compilers
+
+25.01.2003
+	OpenTCP version 1.0.1
+	- some erorrs in documentation regarding TCP timeout values were fixed
+	- error in vectors.c where non-existing serial.h is included corrected
+	- Rx UART interrupt not enabled any more (init.c) and receive
+	  interrupt thrown out of vectors.c.

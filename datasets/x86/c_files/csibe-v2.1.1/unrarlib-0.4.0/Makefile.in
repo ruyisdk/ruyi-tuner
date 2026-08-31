@@ -1,0 +1,64 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS=$(CCOPT) -I$(VPATH)/unrarlib -Iunrarlib -DNO_DEBUG -w
+
+OBJS= unrarlib/unrarlib.o  \
+      samples/unix/getfile/getfile.o \
+      samples/unix/listarchive/listarchive.o
+
+PROGS=samples/unix/getfile/getfile samples/unix/listarchive/listarchive
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p unrarlib samples/unix/getfile samples/unix/listarchive
+
+objs: dirs $(OBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+run:
+
+# PRGS
+
+samples/unix/getfile/getfile: samples/unix/getfile/getfile.o unrarlib/libunrar.a
+	$(LD) -o $@ $^
+
+samples/unix/listarchive/listarchive: samples/unix/listarchive/listarchive.o unrarlib/libunrar.a
+	$(LD) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+unrarlib/libunrar.a: unrarlib/unrarlib.o
+	$(AR) $@ $^
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(PROGS) unrarlib/libunrar.a

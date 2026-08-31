@@ -81,3 +81,8 @@
 - GA 返回的优化后大小增加不变量约束：得分为 0（含浮点误差下的微小负值）时优化后大小与基线一致，保证不反超基线，平均缩减率不会被边界情况拉负；
 - Readme 的评分标准重写：弃用"得分"表述，统一使用 Code Size Reduction Rate 与 Mean Reduction Rate，并补充 Mean Reduction Rate 的加权汇总公式与 0 缩减文件计入分母的说明；
 - 新增7个x86架构测试用例datasets/x86/1_27.ll~1_33.ll：风格与已有数据集一致（x86_64 target triple与datalayout、clang 21.1.8的TBAA/循环元数据、main+scanf/printf I/O），内容相对更复杂，覆盖矩阵转置（二维数组GEP、嵌套循环）、斐波那契求和（递归+迭代双函数、奇偶分支）、GCD/LCM（多函数、while辗转相除）、埃氏筛（三层循环、bool数组）、快速幂（while+位运算、i64乘法与截断）、矩阵乘法（三个二维数组、三层嵌套循环）、数位处理（switch跳转表、多case合并）等类别；上述7个测试用例均通过llvm-as解析、opt -passes=verify校验与clang -c -O2代码生成验证；
+
+### 1.7版本变更
+- datasets/x86目录结构调整：原先平铺在datasets/x86下的12个.ll测试用例（1_17、1_18、1_24~1_33）整体移动到子目录datasets/x86/1_x_ll/，文件名保持不变，为后续c源码类数据集与.ll数据集并存做准备；
+- 新增C源码数据集datasets/x86/c_files/csibe-v2.1.1：引入CSiBE v2.1.1基准测试套件源码（共3586个文件，其中.c/.h文件3171个，其余为Makefile/脚本/文档/图片等），包含bzip2-1.0.2、cg_compiler_opensrc、jpeg-6b、libpng-1.2.5、zlib-1.1.4、linux-2.4.23-pre3-testplatform等19个benchmark，为后续--input_type c的处理路径准备数据；
+- ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c的处理路径待定，当前打印提示后以退出码1结束；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；

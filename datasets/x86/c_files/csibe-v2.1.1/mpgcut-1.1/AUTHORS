@@ -1,0 +1,28 @@
+mpgcut was designed by
+laurent Alacoque <laureck@users.sourceforge.net>
+(c) 2000
+
+knowledge of file format was provided by several tools such as
+
+----------------------------------------------------------------------
+MPEGSTAT - analyzing tool for MPEG-I video streams
+ *
+ * Copyright (c) 1995 University of California at Berkeley
+ *
+ * Technical University of Berlin, Germany, Dept. of Computer Science
+ * Tom Pfeifer - Multimedia systems project - pfeifer@fokus.gmd.de
+ *
+ * Jens Brettin, Harald Masche, Alexander Schulze, Dirk Schubert
+
+from which I also borrowed the pack header read Timestamp algo.
+----------------------------------------------------------------------
+MPLEX 1.1
+*  Generating a MPEG/SYSTEMS                         *
+*  MULTIPLEXED VIDEO/AUDIO STREAM                    *
+*  from two MPEG source streams                      *
+*  Christoph Moar                            *
+*  SIEMENS CORPORATE RESEARCH AND DEVELOPMENT ST SN 11 / T SN 6      *
+*  (C) 1994 1995                             *
+
+from which I also borrowed some static framerate arrays :)
+----------------------------------------------------------------------

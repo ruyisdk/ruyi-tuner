@@ -14,13 +14,15 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计，还可通过 `--count_mode obj-size` 切换为 .o 文件 .text 段字节大小统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
-**使用方式**：输入为包含 .ll 文件的数据集目录与 LLVM 工具链路径（opt）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
+**使用方式**：输入为数据集目录与 LLVM 工具链路径（opt），输入文件类型由 `--input_type` 指定（ll=LLVM IR，c=C 源码，当前 c 的处理路径尚未实现）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
 
 ## 项目结构
 
 ```
-├── datasets/            # LLVM IR (.ll) 测试文件
-│   ├── x86/             # x86架构数据集: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
+├── datasets/            # 测试数据集 (.ll IR 与 C 源码)
+│   ├── x86/             # x86架构数据集
+│   │   ├── 1_x_ll/      #   LLVM IR: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
+│   │   └── c_files/     #   C源码: CSiBE v2.1.1基准测试套件(为--input_type c的处理路径准备)
 │   └── riscv/           # RISC-V架构数据集: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
 ├── output/              # 训练输出结果
 │   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对(已过滤空结果)
@@ -64,17 +66,20 @@ ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完�
 # 完整流程：训练 → 用训练得到的协同Pass对做GA优化
 python3 ruyituner.py \
     --dataset ./datasets/x86 \
+    --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin
 
 # 仅训练，不优化
 python3 ruyituner.py \
     --dataset ./datasets/x86 \
+    --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
 # 仅优化（复用已有的Step2_EnumeratedPairs.csv）
 python3 ruyituner.py \
     --dataset ./datasets/x86 \
+    --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
     --paircsv ./output/Step2_EnumeratedPairs.csv
@@ -82,12 +87,14 @@ python3 ruyituner.py \
 # 用 .o 文件字节大小作为评分口径（要求工具链同时包含opt与llc）
 python3 ruyituner.py \
     --dataset ./datasets/x86 \
+    --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --count_mode obj-size
 ```
 
 **参数说明：**
-- `--dataset`: 包含 .ll 文件的数据集目录（必选，训练与优化共用）
+- `--dataset`: 数据集目录（必选，训练与优化共用）
+- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，处理路径待定，当前打印提示后以退出码1结束
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
@@ -212,6 +219,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 ## 注意事项
 
 - 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序生成的 .ll 文件；
+- `ruyituner.py` 的 `--input_type` 目前仅支持 `ll`；`c`（C 源码）的处理路径尚未实现，指定后脚本会打印输入文件类型与提示并以退出码 1 结束，待实现后 `datasets/x86/c_files/csibe-v2.1.1` 可直接作为 c 类型数据集使用；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（生成时加 `-Xclang -disable-O0-optnone`）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
 - 训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链中的 opt（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 

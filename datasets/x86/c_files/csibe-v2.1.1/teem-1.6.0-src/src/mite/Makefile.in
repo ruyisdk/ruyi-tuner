@@ -1,0 +1,42 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+
+OBJS = defaultsMite.o user.o txf.o renderMite.o thread.o ray.o
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs:
+
+comp:
+
+# PROG
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libmite.a: $(OBJS)
+	$(AR) $@ $^
+
+clean-comp:
+
+clean:
+	rm -f $(OBJS) libmite.a

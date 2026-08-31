@@ -1,0 +1,31 @@
+TESTDATA=../../../testdata
+
+run: dehex0.run dehex1.run enhex0.run enhex1.run
+
+dehex0.run: dehex
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE.hex CSiBE.hex.ppm; \
+		$(RM) -f CSiBE.hex.ppm; \
+	done
+
+dehex1.run: dehex
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE0.hex CSiBE0.hex.ppm; \
+		$(RM) -f CSiBE0.hex.ppm; \
+	done
+
+enhex0.run: enhex
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE.ppm CSiBE.ppm.hex; \
+		$(RM) -f CSiBE.ppm.hex; \
+	done
+
+enhex1.run: enhex
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE0.ppm CSiBE0.ppm.hex; \
+		$(RM) -f CSiBE0.ppm.hex; \
+	done

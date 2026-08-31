@@ -1,0 +1,65 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS    = $(CCOPT) -ansi -w
+
+# The compiler files involved
+
+OBJS = main.o \
+       parser.o \
+       scanner.o \
+       cg.o
+
+PROGS=vc vas vam
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+
+objs: $(OBJS) vas.o vam.o
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PRGS
+
+vc: $(OBJS)
+	$(LD) -o $@ $(CFLAGS) $^
+
+vas: vas.o
+	$(LD) -o $@ $(CFLAGS) $^
+
+vam: vam.o
+	$(LD) -o $@ $(CFLAGS) $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+
+	$(RM) $(OBJS) vas.o vam.o $(PROGS)

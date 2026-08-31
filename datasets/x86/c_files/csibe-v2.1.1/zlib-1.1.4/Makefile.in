@@ -1,0 +1,64 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) -w
+
+#LDFLAGS=-lz
+#LIBS=libz.a
+
+OBJS = adler32.o compress.o crc32.o gzio.o uncompr.o deflate.o trees.o \
+       zutil.o inflate.o infblock.o inftrees.o infcodes.o infutil.o inffast.o
+
+TEST_OBJS = example.o minigzip.o
+
+PROGS=example minigzip
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PRGS
+
+example: example.o libz.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+minigzip: minigzip.o libz.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libz.a: $(OBJS)
+	$(AR) $@ $^
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(PROGS) example.o minigzip.o libz.a

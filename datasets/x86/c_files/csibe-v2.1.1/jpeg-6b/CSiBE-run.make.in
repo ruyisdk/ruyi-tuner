@@ -1,0 +1,66 @@
+TESTDATA=../testdata
+
+run: cjpeg0.run cjpeg1.run cjpeg2.run djpeg0.run djpeg1.run djpeg2.run jpegtran0.run jpegtran1.run jpegtran2.run
+
+cjpeg0.run: cjpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -quality 100 $(TESTDATA)/CSiBE.ppm >CSiBE.ppm.jpg ; \
+	done
+	$(RM) CSiBE.ppm.jpg
+
+cjpeg1.run: cjpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -quality 100 $(TESTDATA)/CSiBE0.ppm >CSiBE0.ppm.jpg ; \
+	done
+	$(RM) CSiBE0.ppm.jpg
+
+cjpeg2.run: cjpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -quality 100 $(TESTDATA)/CSiBE1.ppm >CSiBE1.ppm.jpg ; \
+	done
+	$(RM) CSiBE2.ppm.jpg
+
+djpeg0.run: djpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE.jpg >CSiBE.jpg.ppm; \
+	done
+	$(RM) CSiBE.jpg.ppm
+
+djpeg1.run: djpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE0.jpg >CSiBE0.jpg.ppm; \
+	done
+	$(RM) CSiBE0.jpg.ppm
+
+djpeg2.run: djpeg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE1.jpg >CSiBE1.jpg.ppm; \
+	done
+	$(RM) CSiBE1.jpg.ppm
+
+jpegtran0.run: jpegtran
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -grayscale -rotate 270 $(TESTDATA)/CSiBE.jpg >CSiBE.jpg.jpg ; \
+	done
+	$(RM) CSiBE.jpg.jpg
+
+jpegtran1.run: jpegtran
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -optimize -grayscale -rotate 90 $(TESTDATA)/CSiBE0.jpg >CSiBE0.jpg.jpg ; \
+	done
+	$(RM) CSiBE0.jpg.jpg
+
+jpegtran2.run: jpegtran
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< -progressive -grayscale -flip vertical $(TESTDATA)/CSiBE1.jpg >CSiBE1.jpg.jpg ; \
+	done
+	$(RM) CSiBE1.jpg.jpg

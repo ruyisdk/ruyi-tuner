@@ -1,0 +1,70 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w -I$(VPATH)
+LDFLAGS = -lm
+LIBS = libair.a
+
+OBJS = 754.o array.o miscAir.o parseAir.o endianAir.o \
+	dio.o mop.o enum.o sane.o string.o threadAir.o
+TESTS = test/floatprint test/doubleprint test/tok \
+	test/tmop test/tline test/fp
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libair.a: $(OBJS)
+	$(AR) $@ $^
+
+test/floatprint: test/floatprint.o $(LIBS)
+test/doubleprint: test/doubleprint.o $(LIBS)
+test/tok: test/tok.o $(LIBS)
+test/tmop: test/tmop.o $(LIBS)
+test/tline: test/tline.o $(LIBS)
+test/fp: test/fp.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libair.a

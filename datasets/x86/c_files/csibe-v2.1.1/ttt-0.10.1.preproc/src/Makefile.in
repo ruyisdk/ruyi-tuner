@@ -1,0 +1,44 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS := $(CCOPT) -w
+
+PROGS = ttt connect4
+
+OBJS_common = engine.o main.o parse.o util.o
+OBJS_ttt = ttt.o
+OBJS_connect4 = connect4.o
+
+.SUFFIXES:
+.SUFFIXES: .i .o
+
+all:
+
+.i.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+	    $(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS_common) $(OBJS_ttt) $(OBJS_connect4)
+
+prgs:
+
+comp:
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+
+clean: 
+	rm -f $(OBJS_common) $(OBJS_ttt) $(OBJS_connect4)
