@@ -7,7 +7,8 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', c
         # 基线: 按用户指定的优化等级(opt_level, 默认Oz)优化后的指令数/代码大小
         baseline_count = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
         if(baseline_count == 0):
-            print("file", ll_code, f": {opt_level} baseline is 0!\n")
+            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印)
+            print(f"{opt_level} 优化后为 0, 跳过该文件.")
             return [], 0.0, 0, 0
         # 协同对列表为空时无法构建图, 直接返回空路径/零分, 避免 generate_population 崩溃
         if not edges:
