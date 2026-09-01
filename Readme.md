@@ -12,7 +12,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
 
-**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构——指令计数优先使用 `opt -passes=instcount -stats`（需带 stats 的构建），失败自动回退为 IR 文本统计，还可通过 `--count_mode obj-size` 切换为 .o 文件 .text 段字节大小统计；目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
+**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
 **使用方式**：输入为数据集目录与 LLVM 工具链路径（opt），输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
 
@@ -232,6 +232,9 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 ## 参考文献
 
 - Haolin Pan, Yuanyu Wei, Mingjie Xing, Yanjun Wu, and Chen Zhao. 2025. Towards Efficient Compiler Auto-tuning: Leveraging Synergistic Search Spaces. In Proceedings of the 23rd ACM/IEEE International Symposium on Code Generation and Optimization (CGO '25). Association for Computing Machinery, New York, NY, USA, 614–627. https://doi.org/10.1145/3696443.3708961
+
+## 贡献者
+RuyiTuner V1.0由潘浩林、董津沅开发完成。
 
 ## 版本
 
