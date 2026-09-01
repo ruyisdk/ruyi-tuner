@@ -85,4 +85,4 @@
 ### 1.7版本变更
 - datasets/x86目录结构调整：原先平铺在datasets/x86下的12个.ll测试用例（1_17、1_18、1_24~1_33）整体移动到子目录datasets/x86/1_x_ll/，文件名保持不变，为后续c源码类数据集与.ll数据集并存做准备；
 - 新增C源码数据集datasets/x86/c_files/csibe-v2.1.1：引入CSiBE v2.1.1基准测试套件源码（共3586个文件，其中.c/.h文件3171个，其余为Makefile/脚本/文档/图片等），包含bzip2-1.0.2、cg_compiler_opensrc、jpeg-6b、libpng-1.2.5、zlib-1.1.4、linux-2.4.23-pre3-testplatform等19个benchmark，为后续--input_type c的处理路径准备数据；
-- ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c的处理路径待定，当前打印提示后以退出码1结束；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；
+- ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c类型先用clang（优先--llvm_tools_path下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、多线程并行编译；编译失败的.c文件告警跳过，全部失败则报错退出），生成的.ll放入临时IR缓存目录（tempfile.mkdtemp）并作为--dataset传给后续训练与优化，流程结束自动清理缓存目录（提前退出也会清理）；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；
