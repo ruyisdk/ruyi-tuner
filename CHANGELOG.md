@@ -87,3 +87,4 @@
 - 新增C源码数据集datasets/x86/c_files/csibe-v2.1.1：引入CSiBE v2.1.1基准测试套件源码（共3586个文件，其中.c/.h文件3171个，其余为Makefile/脚本/文档/图片等），包含bzip2-1.0.2、cg_compiler_opensrc、jpeg-6b、libpng-1.2.5、zlib-1.1.4、linux-2.4.23-pre3-testplatform等19个benchmark，为后续--input_type c的处理路径准备数据；
 - ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c类型先用clang（优先--llvm_tools_path下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、多线程并行编译；编译失败的.c文件告警跳过，全部失败则报错退出），生成的.ll放入临时IR缓存目录（tempfile.mkdtemp）并作为--dataset传给后续训练与优化，流程结束自动清理缓存目录（提前退出也会清理）；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；
 - utils/GA.py 基线大小为 0 时的提示不再打印整个 .ll 文件内容，改为只输出“<优化等级> 优化后为 0, 跳过该文件”（文件名已由 run.py 的 Current File 行显示）；
+- 在Readme.md中添加工作流程图；
