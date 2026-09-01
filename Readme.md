@@ -98,11 +98,19 @@ python3 ruyituner.py \
     --dataset ./datasets/x86/c_files \
     --input_type c \
     --llvm_tools_path /llvm_dir/build/bin
+
+# 旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败
+python3 ruyituner.py \
+    --dataset ./datasets/x86/c_files/csibe-v2.1.1/compiler \
+    --input_type c \
+    --llvm_tools_path /llvm_dir/build/bin \
+    --c_std gnu89
 ```
 
 **参数说明：**
 - `--dataset`: 数据集目录（必选，训练与优化共用）
 - `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先`--llvm_tools_path`下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、并行编译），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的.c文件告警跳过，全部失败则报错退出
+- `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）

@@ -88,3 +88,4 @@
 - ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c类型先用clang（优先--llvm_tools_path下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、多线程并行编译；编译失败的.c文件告警跳过，全部失败则报错退出），生成的.ll放入临时IR缓存目录（tempfile.mkdtemp）并作为--dataset传给后续训练与优化，流程结束自动清理缓存目录（提前退出也会清理）；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；
 - utils/GA.py 基线大小为 0 时的提示不再打印整个 .ll 文件内容，改为只输出“<优化等级> 优化后为 0, 跳过该文件”（文件名已由 run.py 的 Current File 行显示）；
 - 在Readme.md中添加工作流程图；
+- ruyituner.py新增--c_std可选参数（如--c_std gnu89）：以-std=<值>传给clang，仅--input_type c时生效，不提供时不传-std参数；解决CSiBE中compiler等旧式C代码（K&R/C89）因隐式函数声明在C99+下报错而无法生成.ll的问题；
