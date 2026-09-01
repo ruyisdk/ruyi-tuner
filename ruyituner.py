@@ -24,10 +24,15 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
   # 旧式 C 代码 (K&R/C89, 如 CSiBE 的 compiler 基准) 需通过 --c_std 指定 C 标准, 否则隐式函数声明报错
   python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/compiler --input_type c \
       --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
+
+  # 依赖自定义编译宏的项目 (如 flex 需 -DHAVE_CONFIG_H) 可通过 --c_flags 追加 clang 参数
+  python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/flex-2.5.31 --input_type c \
+      --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
 """
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -71,10 +76,11 @@ def find_clang(llvm_tools_path):
     return shutil.which('clang')
 
 
-def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None):
+def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None):
     """用clang把src_root下所有.c文件编译为.ll并放入cache_dir(保持相对目录结构).
 
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
+    c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
     编译失败的.c文件告警跳过; 返回 (成功数, 失败数).
     """
     c_files = []
@@ -94,6 +100,8 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         cmd = [clang, '-O0', '-S', '-emit-llvm',
                '-Xclang', '-disable-O0-optnone']
+        if c_flags:
+            cmd += shlex.split(c_flags)
         if c_std is not None:
             cmd.append(f'-std={c_std}')
         cmd += [src, '-o', dst]
@@ -134,6 +142,8 @@ def main():
                         help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (先用clang生成.ll再走原路径)')
     parser.add_argument('--c_std', type=str, default=None,
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
+    parser.add_argument('--c_flags', type=str, default=None,
+                        help='传给 clang 的额外编译参数, 如 -DHAVE_CONFIG_H (可选, 仅 --input_type c 生效; 支持空格分隔多个)')
     parser.add_argument('--llvm_tools_path', type=str, required=True,
                         help='LLVM工具链路径，包含opt')
     parser.add_argument('--output_dir', type=str, default=None,
@@ -162,7 +172,20 @@ def main():
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
                         help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step2_EnumeratedPairs.csv')
-    args = parser.parse_args()
+    # --c_flags 的值常以 - 开头 (如 -DHAVE_CONFIG_H), argparse 会误当成选项报
+    # "expected one argument"; 解析前把 "--c_flags <值>" 合并为 "--c_flags=<值>"
+    argv = list(sys.argv[1:])
+    merged_argv = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == '--c_flags' and i + 1 < len(argv) \
+                and argv[i + 1].startswith('-') and argv[i + 1] != '-':
+            merged_argv.append(f'--c_flags={argv[i + 1]}')
+            i += 2
+        else:
+            merged_argv.append(argv[i])
+            i += 1
+    args = parser.parse_args(merged_argv)
 
     if args.only_train and args.only_run:
         parser.error('--only_train 与 --only_run 不能同时使用')
@@ -178,10 +201,11 @@ def main():
             print('[ruyituner] 未找到 clang: --llvm_tools_path 与系统 PATH 中均无可用 clang, 终止.')
             sys.exit(1)
         std_info = f', C 标准: {args.c_std}' if args.c_std else ''
-        print(f'[ruyituner] 输入为 c: 使用 clang 生成 .ll ({clang}{std_info})')
+        flags_info = f', 额外参数: {args.c_flags}' if args.c_flags else ''
+        print(f'[ruyituner] 输入为 c: 使用 clang 生成 .ll ({clang}{std_info}{flags_info})')
         cache_dir = tempfile.mkdtemp(prefix='ruyituner_ir_')
         print(f'[ruyituner] IR 缓存目录: {cache_dir}')
-        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std)
+        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags)
         if ok == 0:
             print('[ruyituner] 未能从任何 .c 文件生成 .ll, 终止.')
             shutil.rmtree(cache_dir, ignore_errors=True)

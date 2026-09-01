@@ -89,3 +89,5 @@
 - utils/GA.py 基线大小为 0 时的提示不再打印整个 .ll 文件内容，改为只输出“<优化等级> 优化后为 0, 跳过该文件”（文件名已由 run.py 的 Current File 行显示）；
 - 在Readme.md中添加工作流程图；
 - ruyituner.py新增--c_std可选参数（如--c_std gnu89）：以-std=<值>传给clang，仅--input_type c时生效，不提供时不传-std参数；解决CSiBE中compiler等旧式C代码（K&R/C89）因隐式函数声明在C99+下报错而无法生成.ll的问题；
+- ruyituner.py新增--c_flags可选参数（如--c_flags '-DHAVE_CONFIG_H'）：按空白拆分后原样追加到clang命令，仅--input_type c时生效，不提供时不传；解决flex等依赖autoconf宏的基准无法生成.ll的问题（flexdef.h在HAVE_CONFIG_H未定义时不include标准头，FILE/jmp_buf等类型未知导致大量文件编译失败）；
+- 修复--c_flags以-开头的值（如'-DHAVE_CONFIG_H'）被argparse误认为选项而报"expected one argument"的问题：解析前把"--c_flags <值>"合并为"--c_flags=<值>"，两种写法均可；
