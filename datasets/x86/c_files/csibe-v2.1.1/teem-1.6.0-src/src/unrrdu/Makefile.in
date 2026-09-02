@@ -1,0 +1,48 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+
+OBJS = flotsam.o flip.o slice.o convert.o crop.o pad.o permute.o histo.o \
+	resample.o cmedian.o reshape.o shuffle.o minmax.o quantize.o \
+	unquantize.o block.o unblock.o project.o swap.o join.o dhisto.o \
+	jhisto.o dice.o heq.o histax.o gamma.o make.o 1op.o 2op.o 3op.o \
+	lut.o rmap.o imap.o save.o head.o data.o splice.o inset.o \
+	axinsert.o axdelete.o axinfo.o ccfind.o ccadj.o ccmerge.o \
+	ccsettle.o about.o axsplit.o axmerge.o
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs:
+
+comp:
+
+# PROG
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libunrrdu.a: $(OBJS)
+	$(AR) $@ $^
+
+clean-comp:
+
+clean:
+	rm -f $(OBJS) libunrrdu.a

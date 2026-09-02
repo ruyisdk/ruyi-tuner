@@ -1,0 +1,30 @@
+Files available:
+================
+
+  Size    Name
+ (bytes)
+
+  5480    BUGS
+   711    CORRECTIONS
+  1793    HELP
+   506    INDEX
+   564    Makefile-vam
+   558    Makefile-vas
+   845    Makefile-vc
+  3815    README
+117122    all.shar
+ 20414    cg.c
+   165    header
+  1735    lib
+ 16436    main.c
+ 57267    opt-1.shar
+ 69767    opt-2.shar
+  3005    opt-ex.shar
+126803    opt.shar
+ 22555    parser.y
+  6320    scanner.l
+ 14782    vam.c
+  4469    vam.doc
+  9230    vas.y
+ 32944    vaxmacro.shar
+  9300    vc.h

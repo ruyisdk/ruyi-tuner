@@ -83,10 +83,12 @@ SECTION_HEADERS = {
 # 纯观察/调试类 pass, 对代码大小优化无意义, 直接排除
 OBSERVER_PATTERN = re.compile(r'^(print($|-|<)|dot-|view-|debugify|check-debugify)')
 
-# 插桩类 pass (sanitizer/profiling/coverage), 只会增大代码体积, 默认排除
+# 插桩类 pass (sanitizer/profiling/coverage), 只会增大代码体积, 默认排除;
+# pseudo-probe 的输出在 RISC-V 上 llc -filetype=obj 无法汇编, 也一并剔除
 INSTRUMENTATION_PATTERN = re.compile(
     r'^(asan|hwasan|msan|tsan|dfsan|nsan|rtsan|tysan|sanmd|sancov'
-    r'|pgo-|instrprof|insert-gcov-profiling|sample-profile|memprof|ctx-prof|ctx-instr)')
+    r'|pgo-|instrprof|insert-gcov-profiling|sample-profile|memprof|ctx-prof|ctx-instr'
+    r'|pseudo-probe)')
 
 # 独立运行的 internalize 会连同 main 一起 internalize, 之后清理类 pass 会把整个
 # 模块清空, 导致 GA 评分虚高为 1.0 (假胜利), 因此在生成 pass 列表时默认剔除
@@ -296,6 +298,8 @@ args.add_argument("--passlist_output", type=str, default=None, help="output path
 args.add_argument("--no_parse_check", action='store_true', help="skip opt re-parse verification of pass output IR")
 args.add_argument("--keep_instrumentation", action='store_true', help="keep instrumentation passes (asan/tsan/pgo-* etc., excluded by default)")
 args.add_argument("--extra_exclude", type=str, default=None, help="extra exclude rules for the generated pass list (regex)")
+args.add_argument("--count_mode", type=str, default='auto', choices=['auto', 'opt-stats', 'text', 'obj-size'],
+                  help="instruction counting mode: auto (default) | opt-stats | text | obj-size")
 args = args.parse_args()
 
 if args.gen_passlist_only:
@@ -309,7 +313,7 @@ if args.output_dir is None:
     os.makedirs(args.output_dir, exist_ok=True)
     print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
-print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path))
+print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
 """
 Step 1. Find synergistic pairs and save to Step1 CSV
@@ -333,7 +337,7 @@ for root, _, files in os.walk(args.dataset):
             dataset_files.append(os.path.join(root, f))
 check_dataset_arch_matches_opt(dataset_files, os.path.join(args.llvm_tools_path, 'opt'))
 
-syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers)
+syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
 output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
 syner.FindSynerPasses(output_file)
 print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv (rows with empty lists are skipped)")

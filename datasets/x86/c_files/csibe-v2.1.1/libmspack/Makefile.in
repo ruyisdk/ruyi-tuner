@@ -1,0 +1,4 @@
+
+all objs prgs comp run clean clean-comp:
+	$(MAKE) -C mspack $@
+	$(MAKE) -C test $@

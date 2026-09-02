@@ -1,0 +1,91 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+EXTLIBS = ../biff/libbiff.a ../hest/libhest.a ../air/libair.a
+LIBS = libnrrd.a $(EXTLIBS)
+
+OBJS = 	accessors.o    arith.o          arraysNrrd.o   apply1D.o        \
+	axis.o         comment.o        convertNrrd.o  defaultsNrrd.o   \
+	endianNrrd.o   enumsNrrd.o      filt.o         gzio.o           \
+	hestNrrd.o     histogram.o      iter.o         kernel.o         \
+	map.o          measure.o        methodsNrrd.o  parseNrrd.o      \
+	read.o         reorder.o        resampleNrrd.o simple.o         \
+	subset.o       superset.o       tmfKernel.o   \
+	winKernel.o    ccmethods.o      cc.o           range.o          \
+	formatNRRD.o   formatPNM.o      formatPNG.o \
+	formatVTK.o    formatText.o     formatEPS.o    format.o \
+        encodingRaw.o  encodingAscii.o  encodingHex.o \
+	encodingGzip.o encodingBzip2.o  encoding.o \
+	write.o        keyvalue.o
+TESTS = test/tread test/trand test/ax test/io test/minmax test/tkernel \
+	test/typestest test/tline test/genvol test/quadvol test/convo test/kv
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libnrrd.a: $(OBJS)
+	$(AR) $@ $^
+
+$(EXTLIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+test/tread: test/tread.o $(LIBS)
+test/trand: test/trand.o $(LIBS)
+test/ax: test/ax.o $(LIBS)
+test/io: test/io.o $(LIBS)
+test/minmax: test/minmax.o $(LIBS)
+test/tkernel: test/tkernel.o $(LIBS)
+test/typestest: test/typestest.o $(LIBS)
+test/tline: test/tline.o $(LIBS)
+test/genvol: test/genvol.o $(LIBS)
+test/quadvol: test/quadvol.o $(LIBS)
+test/convo: test/convo.o $(LIBS)
+test/kv: test/kv.o $(LIBS)       
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libnrrd.a

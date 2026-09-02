@@ -1,0 +1,175 @@
+			   The VSL Abstract Machine
+
+				  J P Bennett
+
+
+Usage
+=====
+
+Usage is:
+
+    vam [-t] file
+
+In normal operation trace information is printed whenever a NOP is  encountered
+and  when  the  program  halts  normally. With the -t flag trace information is
+printed at the end of each instruction execution. This information consists  of
+the  registers,  program  counter,  zero  flag  status, clock and memory in the
+vicinity of the program counter. A total of 64K bytes of memory is available.
+
+Overview
+========
+
+VAM is a 32 bit machine, with 16 general purpose registers, a program  counter,
+a  single  bit status flag and up to 4G bytes of byte addressed memory. It is a
+byte stream design, but with a very reduced instruction  set  (a  total  of  14
+opcodes). Instructions consist of a single opcode byte, followed by a number of
+argument bytes. 32 bit arguments are stored with the most significant  byte  at
+the  lowest address. In general instructions operating exclusively on registers
+take one cycle, those referencing  memory,  or  involving  a  branch  take  two
+cycles.  The single flag is set to 1 to indicate a zero result. All load, store
+and arithmetic operations affect this flag.
+
+The following is a summary of the instruction set.
+
+HALT
+====
+
+Mnemonic:       HALT
+Opcode value:   0
+Arguments:      None
+                Flag not affected
+Timing:         1 tick
+Action:         Halt the machine
+
+NOP
+===
+
+Mnemonic:       NOP
+Opcode value:   1
+Arguments:      None
+                Flag not affected
+Timing:         1 tick
+Action:         No effect
+
+TRAP
+====
+
+Mnemonic:       TRAP
+Opcode value:   2
+Arguments:      None
+                Flag not affected
+Timing:         1 tick
+Action:         Output LS byte of R15 as ASCII character
+
+ADD
+===
+
+Mnemonic:       ADD Rx,Ry
+Opcode value:   3
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         1 tick
+Action:         Sum Rx and Ry, putting result in Ry
+
+SUB
+===
+
+Mnemonic:       SUB Rx,Ry
+Opcode value:   4
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         1 tick
+Action:         Subtract Rx from Ry, putting result in Ry
+
+MUL
+===
+
+Mnemonic:       MUL Rx,Ry
+Opcode value:   5
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         5 ticks
+Action:         Multiply Rx and Ry, putting result in Ry
+
+DIV
+===
+
+Mnemonic:       DIV Rx,Ry
+Opcode value:   6
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         10 ticks
+Action:         Divide Rx by Ry, putting result in Ry
+
+STI
+===
+
+Mnemonic:       STI Rx,offset(Ry)
+Opcode value:   7
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                32 bit word for offset
+                Sets flag on value
+Timing:         2 ticks
+Action:         Store Rx at the address in Ry indexed by offset
+
+LDI
+===
+
+Mnemonic:       LDI offset(Rx),Ry
+Opcode value:   8
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                32 bit word for offset
+                Sets flag on value
+Timing:         2 ticks
+Action:         Load Ry with the value at the address in Ry indexed by offset
+
+LDA
+===
+
+Mnemonic:       LDA offset(Rx),Ry
+Opcode value:   9
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                32 bit word for offset
+                Sets flag on value
+Timing:         2 ticks
+Action:         Load Ry with the contents of Ry plus offset
+
+LDR
+===
+
+Mnemonic:       LDR Rx,Ry
+Opcode value:   10
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         1 tick
+Action:         Load Ry with the value in Rx
+
+BZE
+===
+
+Mnemonic:       BZE offset
+Opcode value:   11
+Arguments:      32 bit word offset
+                Sets flag on value
+Timing:         2 ticks if branch taken, otherwise 1
+Action:         Branch by offset if the flag is 1
+
+BNZ
+===
+
+Mnemonic:       BNZ offset
+Opcode value:   12
+Arguments:      32 bit word offset
+                Sets flag on value
+Timing:         2 ticks if branch taken, otherwise 1
+Action:         Branch by offset if the flag is 0
+
+BAL
+===
+
+Mnemonic:       BAL Rx,Ry
+Opcode value:   13
+Arguments:      Single byte, Rx in MS nybble, Ry in LS nybble
+                Sets flag on value
+Timing:         2 ticks
+Action:         Branch to the address in Rx, putting the return address in Ry

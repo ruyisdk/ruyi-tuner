@@ -1,0 +1,54 @@
+		 Obtaining the VC compiler by Electronic Mail
+		 ============================================
+
+To obtain files for the vc compiler for VSL, the vas assembler or the VAM
+interpreter send a message to jpb=compiler-request@uk.ac.bath.maths or
+jpb=cr@uk.ac.bath.maths. The body of the message should have the following
+format:
+
+   <one or more commmands>
+   end:
+
+Possible commands are as follows
+
+help:
+
+   This will send this help file
+
+index:
+
+   This will send a list of the files available and their sizes
+
+send: <filename>
+
+   This will send the named file. If no file is specified, or the filename
+   given is "all", all files for vc, vas and vam will be sent, together with
+   some of the information files. Some more specialist files need to be
+   requested explicitly. If you want two or more specific files, use two or
+   more send: commands.
+
+path: <pathname>
+
+   This is a return address to which any subsequent files will be sent. If it
+   is not present files will be sent to the address in the Reply-To: field of
+   the message, or failing that the From: field. It makes sense to have this as
+   the first command in the message.
+
+If you have problems try sending a message, detailing the problem, to
+jpb=compiler-bugs@uk.ac.bath.maths.
+
+Files are supplied strictly on an "as is" basis. I am always pleased to hear
+about bugs and suggested improvements, but make no promises about fixing them.
+Please send any comments/questions you may have electronically to
+jpb=compiler-bugs@uk.ac.bath.maths
+
+There is also now an experimental anonymous ftp service from
+axiom.maths.bath.ac.uk where the files may be found in the directory
+pub/comp-tech/jpb-book.
+
+Happy programming,
+
+Jeremy Bennett                          Tel:   (0225) 826891
+School of Mathematical Sciences         Telex: 449097 UOBATH G
+University of Bath                      Fax:   (0225) 826492 (Group 3)
+Bath, BA2 7AY                           Email: jpb@uk.ac.bath.maths

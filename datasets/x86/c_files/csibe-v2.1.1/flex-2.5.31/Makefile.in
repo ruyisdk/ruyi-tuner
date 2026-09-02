@@ -1,0 +1,60 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS := $(CCOPT) -DHAVE_CONFIG_H -I$(VPATH)/../include -w
+LDFLAGS:= -lm
+
+OBJS :=	ccl.o dfa.o ecs.o gen.o main.o misc.o nfa.o parse.o \
+	scan.o skel.o sym.o tblcmp.o yylex.o options.o scanopt.o buf.o \
+	tables.o tables_shared.o filter.o regex.o
+LIBOBJS := libmain.o libyywrap.o
+
+PROGS=flex
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS) $(LIBOBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PRGS
+
+flex: $(OBJS) libfl.a
+	$(LD) -o $@ $(LDFLAGS) $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libfl.a: $(LIBOBJS)
+	rm -f $@
+	$(AR) $@ $^
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(LIBOBJS) $(PROGS)

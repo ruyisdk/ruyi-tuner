@@ -1,0 +1,52 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+LARGEFILE=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
+CFLAGS=$(LARGEFILE) $(CCOPT) -w -I.
+
+OBJS =	cabc.o cabd.o \
+	chmc.o chmd.o \
+	hlpc.o hlpd.o \
+	kwajc.o kwajd.o \
+	litc.o litd.o \
+	szddc.o szddd.o \
+	lzxc.o lzxd.o \
+	mszipc.o mszipd.o \
+	qtmc.o qtmd.o \
+	system.o
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs:
+
+comp:
+
+# PRGS
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libmspack.a: $(OBJS)
+	$(RM) $@
+	$(AR) $@ $^
+
+clean-comp:
+
+clean:
+	$(RM) $(OBJS) libmspack.a

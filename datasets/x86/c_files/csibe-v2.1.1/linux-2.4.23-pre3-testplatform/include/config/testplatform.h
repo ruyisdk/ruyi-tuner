@@ -1,0 +1,1 @@
+#define CONFIG_TESTPLATFORM 1

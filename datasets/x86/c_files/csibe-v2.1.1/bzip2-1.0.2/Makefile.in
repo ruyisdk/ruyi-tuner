@@ -1,0 +1,65 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS=$(CCOPT) -D_FILE_OFFSET_BITS=64 -w
+
+OBJS= blocksort.o  \
+      huffman.o    \
+      crctable.o   \
+      randtable.o  \
+      compress.o   \
+      decompress.o \
+      bzlib.o
+
+PROGS= bzip2 bzip2recover
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS) bzip2.o bzip2recover.o
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PRGS
+
+bzip2: bzip2.o libbz2.a
+	$(LD) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+bzip2recover: bzip2recover.o
+	$(LD) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libbz2.a: $(OBJS)
+	rm -f $@
+	$(AR) $@ $^
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) bzip2.o bzip2recover.o libbz2.a $(PROGS)

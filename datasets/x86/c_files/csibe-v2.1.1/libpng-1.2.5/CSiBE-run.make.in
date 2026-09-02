@@ -1,0 +1,31 @@
+TESTDATA=../testdata
+
+run: png2pnm0.run png2pnm1.run pnm2png0.run pnm2png1.run 
+
+png2pnm0.run: png2pnm
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE.png >CSiBE.png.ppm; \
+	done
+	$(RM) CSiBE.png.ppm
+
+png2pnm1.run: png2pnm
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE0.png >CSiBE0.png.ppm; \
+	done
+	$(RM) CSiBE0.png.ppm
+
+pnm2png0.run: pnm2png
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE.ppm >CSiBE.ppm.png; \
+	done
+	$(RM) CSiBE.ppm.png
+
+pnm2png1.run: pnm2png
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTDATA)/CSiBE0.ppm >CSiBE0.ppm.png; \
+	done
+	$(RM) CSiBE0.ppm.png

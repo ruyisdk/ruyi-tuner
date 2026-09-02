@@ -1,0 +1,61 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+LIBS = ../bane/libbane.a ../gage/libgage.a ../moss/libmoss.a ../dye/libdye.a \
+	../ell/libell.a ../nrrd/libnrrd.a ../biff/libbiff.a ../hest/libhest.a ../air/libair.a
+
+OBJS = dehex.o enhex.o
+
+PROGS:=dehex enhex
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+$(LIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+dehex: dehex.o $(LIBS)
+enhex: enhex.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS)

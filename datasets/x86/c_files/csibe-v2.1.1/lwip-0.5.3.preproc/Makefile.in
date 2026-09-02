@@ -1,0 +1,3 @@
+
+all objs prgs comp run clean clean-comp:
+	$(MAKE) -C proj/unixsim $@

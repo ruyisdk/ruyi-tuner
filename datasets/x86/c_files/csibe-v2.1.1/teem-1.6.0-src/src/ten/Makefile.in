@@ -1,0 +1,76 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+LDFLAGS = -lm
+EXTLIBS = ../ell/libell.a ../nrrd/libnrrd.a ../biff/libbiff.a ../hest/libhest.a ../air/libair.a
+LIBS = libten.a $(EXTLIBS)
+
+OBJS = tensor.o chan.o aniso.o glyph.o enumsTen.o miscTen.o mod.o \
+	tenGage.o fiberMethods.o fiber.o epireg.o defaultsTen.o bimod.o \
+	tendFlotsam.o tendAnplot.o tendAnvol.o tendEval.o \
+	tendEvec.o tendSten.o tendExpand.o tendEvq.o tendPoint.o \
+	tendAnhist.o tendMake.o tendSatin.o tendShrink.o tendGlyph.o \
+	tendFiber.o tendEpireg.o tendBmat.o tendEstim.o tendSim.o \
+	tendSlice.o tendEllipse.o tendEvecrgb.o tendNorm.o tendAnscale.o \
+	tendEvalpow.o tendEvalclamp.o tendEvaladd.o
+TESTS = test/tg test/tt test/tem
+TOBJS = $(addsuffix .o,$(TESTS))
+
+PROGS:=$(TESTS)
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+dirs:
+	mkdir -p test
+
+objs: dirs $(OBJS) $(TOBJS)
+
+prgs: $(PROGS)
+
+comp: dirs $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+$(PROGS):
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libten.a: $(OBJS)
+	$(AR) $@ $^
+
+$(EXTLIBS):
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+test/tg: test/tg.o $(LIBS)
+test/tt: test/tt.o $(LIBS)
+test/tem: test/tem.o $(LIBS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		rm -f $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	rm -f $(OBJS) $(TOBJS) $(PROGS) libten.a

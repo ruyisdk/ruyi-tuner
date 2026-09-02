@@ -1,0 +1,10 @@
+TESTFILES=../../testdata/CSiBE.g
+
+run: jikespg.run
+
+jikespg.run: jikespg
+	I=@CSiBE-RUNCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(TIME) ${RUNSIM} ./$< $(TESTFILES) ; \
+	done
+	$(RM) *.java CSiBE.l

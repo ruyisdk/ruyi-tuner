@@ -2,17 +2,18 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from utils.common import get_instrcount
 
-def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
+def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto'):
         import random
-        Oz = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path)
-        # print("Oz: ", Oz)
-        if(Oz == 0):
-            print("file", ll_code, ": Oz is 0!\n")
-            return 0
+        # 基线: 按用户指定的优化等级(opt_level, 默认Oz)优化后的指令数/代码大小
+        baseline_count = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+        if(baseline_count == 0):
+            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印)
+            print(f"{opt_level} 优化后为 0, 跳过该文件.")
+            return [], 0.0, 0, 0
         # 协同对列表为空时无法构建图, 直接返回空路径/零分, 避免 generate_population 崩溃
         if not edges:
             print("协同对列表为空, 跳过该文件.\n")
-            return [], 0
+            return [], 0.0, baseline_count, baseline_count
         # 创建图
         graph = defaultdict(list)
         nodes = set()
@@ -61,7 +62,7 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
 
         # 计算适应度
         def fitness_function(path):
-            score = (Oz - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path)) / Oz
+            score = (baseline_count - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path, count_mode=count_mode)) / baseline_count
             return score, path
 
         def calculate_fitness(population):
@@ -147,9 +148,16 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz'):
                     next_population.append(mutate(child2, mutation_rate))
                 population = next_population
             final_fitness_scores = calculate_fitness(population)
+            # 仅在输出时加非负约束: 最优得分为负时, 负值与对应路径没有意义,
+            # 按无收益输出空路径与0分; 不改变适应度计算与选择过程
+            if final_fitness_scores[0][0] < 0:
+                return [], 0.0, baseline_count, baseline_count
             best_path = final_fitness_scores[0][1]
             best_cost = final_fitness_scores[0][0]
-            return best_path, best_cost
+            # 由得分反推最优路径的优化后大小, 避免重复运行 opt;
+            # 得分为 0 (含浮点误差下的微小负值) 时, 优化后大小与基线一致, 不反超基线
+            after_count = baseline_count if best_cost <= 0 else baseline_count * (1.0 - best_cost)
+            return best_path, best_cost, baseline_count, after_count
         
-        best_path, best_cost = genetic_algorithm(nodes, graph, POPULATION_SIZE, GENERATIONS, MUTATION_RATE, SELECTION_RATE, MAX_PATH_LENGTH)
-        return best_path, best_cost
+        # 返回 (最优路径, 得分, 基线大小, 优化后大小), 供调用方汇总计算平均缩减率
+        return genetic_algorithm(nodes, graph, POPULATION_SIZE, GENERATIONS, MUTATION_RATE, SELECTION_RATE, MAX_PATH_LENGTH)

@@ -1,0 +1,67 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS=$(CCOPT) -w
+
+VER=0.4.0
+
+PROGRAMS=ReplayPC httpfs mark-commercial rddns dump-guide rtvguide
+EXTRA_PROGRAMS=find-GOPs build-ndx ndx-dump un-protect crypt-test dump-cg2 dump-headend dump-zipcode2 dump-filedarray dump-replaychannels dump-addressbook dump-channelset dump-programset dump-replayshows version-test
+
+OBJS=$(addsuffix .o,$(PROGRAMS) $(EXTRA_PROGRAMS))
+
+LIBOBJS=			\
+	addressbook.o		\
+	bigfile.o		\
+	cg.o			\
+	crypt.o			\
+	dump.o			\
+	filedarray.o		\
+	guide.o			\
+	guideclient.o		\
+	headend.o		\
+	httpclient.o		\
+	httpfsclient.o		\
+	ndx.o			\
+	program.o		\
+	rddnsclient.o		\
+	rtv.o			\
+	sleep.o			\
+	zipcode.o		\
+	channelset.o
+
+#	netclient.o
+
+all:
+
+.SUFFIXES:
+.SUFFIXES: .i .o
+
+.i.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+	    $(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(LIBOBJS) $(OBJS)
+
+prgs:
+
+comp:
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+clean-comp:
+
+clean:
+	rm -f $(LIBOBJS) $(OBJS)

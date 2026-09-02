@@ -1,0 +1,7 @@
+Originally by Matthew T. Linehan.  Post v 0.3, primarily by Todd Larason
+
+Other contributors (Thanks!):
+King of Bayonne  (ReplayPC -c option)
+Lee Thompson     (bug fixes and v0.4 Windows build system)
+David Noel	 (bug fixes, Unix support)
+Randy Saunders	 (OS X support)

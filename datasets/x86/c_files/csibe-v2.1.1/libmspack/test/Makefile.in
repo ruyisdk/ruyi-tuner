@@ -1,0 +1,69 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+LARGEFILE=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
+CFLAGS=$(LARGEFILE) $(CCOPT) -w -I$(VPATH)/../mspack -I$(VPATH)/../../include
+
+OBJS =cabd_md5.o cabd_test.o cabextract_md5.o cabrip.o chmd_md5.o md5.o
+
+PROGS=cabd_md5 cabd_test cabextract_md5 cabrip chmd_md5
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(OBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+run:
+
+# PRGS
+
+cabd_md5: cabd_md5.o md5.o ../mspack/libmspack.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+cabd_test: cabd_test.o ../mspack/libmspack.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+cabextract_md5: cabextract_md5.o md5.o
+	$(LD) $(LDFLAGS) -o $@ $^ 
+
+cabrip: cabrip.o ../mspack/libmspack.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+chmd_md5: chmd_md5.o md5.o ../mspack/libmspack.a
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+../mspack/libmspack.a:
+	make -C ../mspack libmspack.a
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		$(RM) $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	$(RM) $(OBJS) $(PROGS)

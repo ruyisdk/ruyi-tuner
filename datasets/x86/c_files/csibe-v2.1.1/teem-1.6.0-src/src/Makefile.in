@@ -1,0 +1,26 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+TEEMDEFS=-DTEEM_32BIT=1 \
+ -DTEEM_ENDIAN=1234 \
+ -DTEEM_QNANHIBIT=1 \
+ -DTEEM_BIGBITFIELD=1 \
+ -DTEEM_DIO=0 \
+ -DTEEM32BIT=1 \
+ -I../../include \
+ -I$(VPATH)/../include
+
+CFLAGS = $(CCOPT) $(TEEMDEFS) -w
+
+CP = cp
+
+DIRS = air hest biff nrrd ell unrrdu dye moss gage bane limn hoover mite alan echo ten hex
+
+all objs prgs comp run clean clean-comp:
+	for D in $(DIRS) ; do if ! TEEMDEFS='$(TEEMDEFS)' $(MAKE) -C $$D $@ ; then exit 1 ; fi ; done

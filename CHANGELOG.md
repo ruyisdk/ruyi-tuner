@@ -1,8 +1,18 @@
 # RuyiTuner 版本变更记录
 
-## 1.0版本位于分支v1.0上；
+## 1.0版本
 
-## 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发。
+- 1.0版本位于分支v1.0上；
+- lib目录下只有一个libAutophase_21_1_8.so；它是在utils/common.py中去调用的，用来计算指令数的；
+- utils下边有三个common.py、GA.py、PassSyner.py三个脚本文件；scripts目录下有train.py和run.py，这是这个工具的主要两个阶段执行的命令，它们会调用utils下边的三个脚本；
+- train.py是为了寻找pass序列对，文件里的内容，主要是处理参数和写文件，核心的函数是syner.FindSynerPasses(output_file)，具体实现是位于utils/PassSyner.py中；
+- run.py是使用遗传算法根据优化序列对，去做最终的优化，找到优化序列；核心函数LeverageSyner_GA_codesize()是在utils/GA.py中；
+- 6.utils/common.py文件包含了公用工具函数get_inst_count、fix_loop_nesting和get_instrcount；get_inst_count函数中用到了lib目录下唯一的一个libAutophase_21_1_8.so；
+- passes.txt中的pass序列是通过Opt print-passes选项输出之后，进行手工筛选了之后的内容。
+
+## 1.x版本
+- 1.x版本位于分支v1.x上，是基于1.0版本进行的后续开发；
+- 1.x系列的所有版本，按照小小版本号来记录变更日志。
 
 ### 1.1版本变更
 - datasets下的.ll测试文件，都是x86架构的，将它们移动到datasets/x86下；
@@ -46,7 +56,7 @@
 ### 1.5版本变更
 - 新增--opt-level参数（ruyituner.py/run.py，默认Oz）：GA基线评分原来写死-Oz，现可由O0/O1/O2/O3/Os/Oz控制；utils/common.py的优化等级分支相应泛化，同时支持-Ox与default<Ox>两种写法；
 - 将Readme中的版本变更记录拆分为独立的CHANGELOG.md，并按独立文件重新分级标题层级；Readme的版本章节改为指向CHANGELOG.md的链接，并注明新增条目追加到最新版本段；
-- Readme细节更新：精简标题tagline；项目结构树修正（README.md改为Readme.md、去除根目录不存在的passes_XXX.txt条目、新增CHANGELOG.md）；训练示例的passfile路径改为passes_examples/passes_2210-gen.txt；环境要求补充pandas安装命令与RUYITUNER_SHOW_OPT_FAILURES环境变量说明；--num_workers描述改为"并行工作线程数"；项目简介按主题拆分段落并加粗关键词；
+- Readme细节更新：精简标题tagline；项目结构树修正（README.md改为Readme.md、去除根目录不存在的passes_XXX.txt条目、新增CHANGELOG.md）；训练示例的passfile路径改为passes_examples/passes_2210-gen.txt；环境要求补充pandas安装命令与RUYITUNER_SHOW_OPT_FAILURES环境变量说明；--num_workers描述改为"并行工作线程数"；项目简介按主题拆分段落并加粗关键词；增加参考文献，添加引用论文；
 - Readme新增"注意事项"小节：小数据集上-Os/-Oz基线可能相同需更大真实程序、.ll文件需内嵌target triple且不带optnone（否则opt跳过pass）、RISC-V数据集需搭配面向RISC-V的交叉编译工具链opt；
 - 使用方法补充细节说明：训练阶段补充协同对的发现过程（单Pass筛选+两两配对）、优化阶段补充GA算法简介/整体优化过程/评分标准与真实输出示例；
 - 新增架构一致性校验：utils/common.py中check_dataset_arch_matches_opt在训练/优化前校验数据集.ll文件内嵌target triple的架构与opt默认目标架构一致（train.py/run.py均已接入），防止用x86目标架构的opt处理riscv数据（反之亦然）；文件缺失triple或架构不匹配时直接报错退出；
@@ -54,3 +64,31 @@
 - 项目简介的使用方式中补充输入输出说明，并添加指向使用说明的跳转链接；
 - scripts/run.py中0分文件的输出改为与正分文件相同的格式（统一输出Path/Score/Mean三行，0分时Path输出为空；Mean仍只统计正分文件、正分文件为空时记0.0；此前0分文件仅打印一行提示）；
 - train.py生成pass列表时，被剔除pass的具体清单与原因默认不打印（仅输出剔除数量），设置环境变量`RUYITUNER_SHOW_EXCLUDED_PASSES=1`可恢复逐条输出；Readme`环境要求`同步补充该环境变量说明；
+
+### 1.6版本变更
+- 新增 `--count_mode` 参数（可选，默认auto）：控制训练/优化阶段的代码大小统计口径，支持 auto/opt-stats/text/obj-size 四种取值；参数已从 ruyituner.py 一路穿透到 train.py、run.py、utils/GA.py、utils/PassSyner.py 与 utils/common.py（GA评分与协同对发现统一受控）；
+- utils/common.py 新增 `get_object_size` 函数：调用 `llc -filetype=obj` 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小（不含符号表/重定位等 ELF 结构开销；临时目录存放、用后清理；llc/llvm-size 缺失或失败返回 None）；
+- `get_inst_count` 新增 `count_mode` 参数开关：'obj-size' 方式即调用 `get_object_size` 返回 .o 字节大小；显式指定 opt-stats/obj-size 而不可用时抛 RuntimeError 快速失败，auto 保持原有 opt-stats→text 回退逻辑；
+- `get_inst_count_method` 同步支持 count_mode，train.py/run.py 启动时展示的计数方式与实际口径一致；
+- `--count_mode obj-size` 统计 .o 文件的 .text 段字节大小，要求工具链同时包含 opt、llc 与 llvm-size；Readme 补充该参数说明、四种计数方式的用法与示例；
+- train.py 的 pass 列表生成默认剔除 pseudo-probe 类插桩 pass：其输出在 RISC-V 上 llc -filetype=obj 无法汇编（.sleb128 expression is not absolute），会使 obj-size 口径的训练中断；
+- obj-size 口径下个别 IR 编译失败（llc/llvm-size 返回非 0 或解析失败）不再中断整个流程：与 opt 崩溃的处理一致，回退统计原始 IR（该序列视为无收益）；工具链本身缺失时仍直接报错快速失败；
+- run.py 的优化结果输出改为百分数并保留两位小数：Score 更名为英文表述 Code Size Reduction Rate，Mean 更名为 Mean Reduction Rate；Readme 输出示例同步更新；
+- GA 仅在最终输出时加非负约束：最优个体得分为负时返回空路径与 0 分（负的缩减率与比 -Oz 还差的路径没有意义）；适应度计算与选择过程保持不变；
+- 曾尝试并放弃"失败回退按 Oz 基线计分 + 选择时非负约束"方案：失败个体得 0 分后在选择阶段反超负分个体、抢占前 10% 父代名额，种群被失败路径污染，导致 datasets/riscv/1_08.ll 的缩减率从 7.47% 降为 0%，故回退该方案，仅保留输出时的非负约束；
+- utils/GA.py 的基线变量由 Oz 重命名为 baseline_count：原变量名与优化等级 Oz 重复易混淆，该变量实际含义是采用用户指定的 opt_level 优化后的指令数/代码大小；
+- 平均缩减率的计算改为按所有文件的基线大小与优化后大小加权汇总：整体平均缩减率 = (Σ基线 − Σ优化后) / Σ基线；缩减率为 0 的文件同样计入分母，会拉低整体平均缩减率（原实现只对正分文件求平均，0 分文件不影响平均分）；GA 返回值相应扩展为 (最优路径, 得分, 基线大小, 优化后大小)；
+- GA 返回的优化后大小增加不变量约束：得分为 0（含浮点误差下的微小负值）时优化后大小与基线一致，保证不反超基线，平均缩减率不会被边界情况拉负；
+- Readme 的评分标准重写：弃用"得分"表述，统一使用 Code Size Reduction Rate 与 Mean Reduction Rate，并补充 Mean Reduction Rate 的加权汇总公式与 0 缩减文件计入分母的说明；
+- 新增7个x86架构测试用例datasets/x86/1_27.ll~1_33.ll：风格与已有数据集一致（x86_64 target triple与datalayout、clang 21.1.8的TBAA/循环元数据、main+scanf/printf I/O），内容相对更复杂，覆盖矩阵转置（二维数组GEP、嵌套循环）、斐波那契求和（递归+迭代双函数、奇偶分支）、GCD/LCM（多函数、while辗转相除）、埃氏筛（三层循环、bool数组）、快速幂（while+位运算、i64乘法与截断）、矩阵乘法（三个二维数组、三层嵌套循环）、数位处理（switch跳转表、多case合并）等类别；上述7个测试用例均通过llvm-as解析、opt -passes=verify校验与clang -c -O2代码生成验证；
+
+### 1.7版本变更
+- datasets/x86目录结构调整：原先平铺在datasets/x86下的12个.ll测试用例（1_17、1_18、1_24~1_33）整体移动到子目录datasets/x86/1_x_ll/，文件名保持不变，为后续c源码类数据集与.ll数据集并存做准备；
+- 新增C源码数据集datasets/x86/c_files/csibe-v2.1.1：引入CSiBE v2.1.1基准测试套件源码（共3586个文件，其中.c/.h文件3171个，其余为Makefile/脚本/文档/图片等），包含bzip2-1.0.2、cg_compiler_opensrc、jpeg-6b、libpng-1.2.5、zlib-1.1.4、linux-2.4.23-pre3-testplatform等19个benchmark，为后续--input_type c的处理路径准备数据；
+- ruyituner.py新增--input_type必选参数（choices: ll/c）：ll走原有训练+GA优化路径；c类型先用clang（优先--llvm_tools_path下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、多线程并行编译；编译失败的.c文件告警跳过，全部失败则报错退出），生成的.ll放入临时IR缓存目录（tempfile.mkdtemp）并作为--dataset传给后续训练与优化，流程结束自动清理缓存目录（提前退出也会清理）；脚本启动时打印当前输入文件类型（[ruyituner] 输入文件类型: xxx）；文档字符串中的用法示例同步补充该参数；
+- utils/GA.py 基线大小为 0 时的提示不再打印整个 .ll 文件内容，改为只输出“<优化等级> 优化后为 0, 跳过该文件”（文件名已由 run.py 的 Current File 行显示）；
+- 在Readme.md中添加工作流程图；
+- ruyituner.py新增--c_std可选参数（如--c_std gnu89）：以-std=<值>传给clang，仅--input_type c时生效，不提供时不传-std参数；解决CSiBE中compiler等旧式C代码（K&R/C89）因隐式函数声明在C99+下报错而无法生成.ll的问题；
+- ruyituner.py新增--c_flags可选参数（如--c_flags '-DHAVE_CONFIG_H'）：按空白拆分后原样追加到clang命令，仅--input_type c时生效，不提供时不传；解决flex等依赖autoconf宏的基准无法生成.ll的问题（flexdef.h在HAVE_CONFIG_H未定义时不include标准头，FILE/jmp_buf等类型未知导致大量文件编译失败）；
+- 修复--c_flags以-开头的值（如'-DHAVE_CONFIG_H'）被argparse误认为选项而报"expected one argument"的问题：解析前把"--c_flags <值>"合并为"--c_flags=<值>"，两种写法均可；
+- Readme结构重排：`环境要求`小节移动到`项目简介`之后，`使用说明`更名为`详细说明`，两条环境变量说明合并为一条；Readme工具链需求按输入类型与计数方式分别描述：输入为LLVM IR（`--input_type ll`）仅需opt，输入为C源码（`--input_type c`）还需clang，使用`--count_mode obj-size`还需llc与llvm-size；ruyituner.py使用演示精简：obj-size示例与三个C输入示例合并为一个flex示例（注释合并总结），并补充--count_mode obj-size；注意事项的RISC-V条目补充"在x86环境下"；贡献者补充RuyiTuner V1.x开发者信息。

@@ -1,0 +1,60 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+VPATH := @CSiBE-SRCDIR@
+
+COBJS = getopt.o
+MOBJS = mpeg2dec.o gettimeofday.o 
+EOBJS = extract_mpeg2.o
+
+CFLAGS = $(CCOPT) -DHAVE_STRING_H -I$(VPATH) -I$(VPATH)/../include -I$(VPATH)/../../include -I. -I../include -I../../include -w
+
+PROGS=extract_mpeg2
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(COBJS) $(EOBJS) $(MOBJS)
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PROG
+
+extract_mpeg2: $(EOBJS) $(COBJS) 
+	@rm -f $@
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+../libmpeg2/libmpeg2.a:
+	$(MAKE) -C ../libmpeg2 libmpeg2.a
+
+../libvo/libvo.a:
+	$(MAKE) -C ../libvo libvo.a
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		$(RM) $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	$(RM) $(COBJS) $(EOBJS) $(MOBJS) $(PROGS)

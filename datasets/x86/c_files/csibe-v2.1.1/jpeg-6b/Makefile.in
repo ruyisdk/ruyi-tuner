@@ -1,0 +1,92 @@
+TIME   = @CSiBE-TIME@
+SIZE  := @CSiBE-SIZE@
+CC     = @CSiBE-CC@
+LD     = @CSiBE-CCLD@
+AR     = @CSiBE-AR@
+CCOPT := @CSiBE-CCOPT@
+ZIP   := @CSiBE-ZIP@
+RUNSIM:= @CSiBE-RUNSIM@
+VPATH := @CSiBE-SRCDIR@
+
+CFLAGS= $(CCOPT) -w -DSTDC_HEADERS
+
+SYSDEPMEM= jmemnobs.o
+
+COMOBJECTS= jcomapi.o jutils.o jerror.o jmemmgr.o $(SYSDEPMEM)
+
+CLIBOBJECTS= jcapimin.o jcapistd.o jctrans.o jcparam.o jdatadst.o jcinit.o \
+        jcmaster.o jcmarker.o jcmainct.o jcprepct.o jccoefct.o jccolor.o \
+        jcsample.o jchuff.o jcphuff.o jcdctmgr.o jfdctfst.o jfdctflt.o \
+        jfdctint.o
+
+DLIBOBJECTS= jdapimin.o jdapistd.o jdtrans.o jdatasrc.o jdmaster.o \
+        jdinput.o jdmarker.o jdhuff.o jdphuff.o jdmainct.o jdcoefct.o \
+        jdpostct.o jddctmgr.o jidctfst.o jidctflt.o jidctint.o jidctred.o \
+        jdsample.o jdcolor.o jquant1.o jquant2.o jdmerge.o
+
+LIBOBJECTS= $(CLIBOBJECTS) $(DLIBOBJECTS) $(COMOBJECTS)
+
+COBJECTS= cjpeg.o rdppm.o rdgif.o rdtarga.o rdrle.o rdbmp.o rdswitch.o \
+        cdjpeg.o
+DOBJECTS= djpeg.o wrppm.o wrgif.o wrtarga.o wrrle.o wrbmp.o rdcolmap.o \
+        cdjpeg.o
+TROBJECTS= jpegtran.o rdswitch.o cdjpeg.o transupp.o
+
+PROGS=ansi2knr cjpeg djpeg jpegtran rdjpgcom wrjpgcom
+
+all:
+
+.c.o:
+	I=@CSiBE-OBJCOUNTER@ ; \
+	while [ $$((I--)) -gt 0 ] ; do \
+		$(CC) $(CFLAGS) -o $@ $< ; \
+	done
+
+objs: $(LIBOBJECTS) $(COBJECTS) $(DOBJECTS) $(TROBJECTS) ansi2knr.o rdjpgcom.o wrjpgcom.o
+
+prgs: $(PROGS)
+
+comp: $(PROGS)
+	for X in $^ ; do \
+		$(ZIP) <$$X >$$X.zipped ; \
+		ls -l $$X.zipped >$$X.comp ; \
+	done
+
+# PRGS
+
+ansi2knr: ansi2knr.o
+	$(LD) -o $@ $^
+
+cjpeg: $(COBJECTS) libjpeg.a
+	$(LD) -o $@ $^
+
+djpeg: $(DOBJECTS) libjpeg.a
+	$(LD) -o $@ $^
+
+jpegtran: $(TROBJECTS) libjpeg.a
+	$(LD) -o $@ $^
+
+rdjpgcom: rdjpgcom.o
+	$(LD) -o $@ $^
+
+wrjpgcom: wrjpgcom.o
+	$(LD) -o $@ $^
+
+# RUN
+
+@CSiBE-RUN-RULES@
+
+# --
+
+libjpeg.a: $(LIBOBJECTS)
+	$(RM) libjpeg.a
+	$(AR) libjpeg.a  $(LIBOBJECTS)
+
+clean-comp:
+	for X in $(PROGS) ; do \
+		$(RM) $$X.zipped $$X.comp ; \
+	done
+
+clean: clean-comp
+	$(RM) $(LIBOBJECTS) $(COBJECTS) $(DOBJECTS) $(TROBJECTS) ansi2knr.o rdjpgcom.o wrjpgcom.o libjpeg.a $(PROGS)
+
