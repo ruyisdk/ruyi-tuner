@@ -18,8 +18,12 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
   python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step2_EnumeratedPairs.csv
 
-  # 输入 C 源码数据集 (先用clang生成.ll到缓存目录, 流程结束自动清理)
+  # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang生成.ll到缓存目录, 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/x86/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
+
+  # 预处理后的 C 源码 (.i) 数据集, 如 CSiBE 的 lwip-0.5.3.preproc (旧式代码需 --c_std gnu89)
+  python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/lwip-0.5.3.preproc --input_type c \
+      --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
 
   # 旧式 C 代码 (K&R/C89, 如 CSiBE 的 compiler 基准) 需通过 --c_std 指定 C 标准, 否则隐式函数声明报错
   python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/compiler --input_type c \
@@ -77,22 +81,32 @@ def find_clang(llvm_tools_path):
 
 
 def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None):
-    """用clang把src_root下所有.c文件编译为.ll并放入cache_dir(保持相对目录结构).
+    """用clang把src_root下所有.c/.i文件编译为.ll并放入cache_dir(保持相对目录结构).
 
+    .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
+    同名 .c 与 .i 并存时优先 .c;
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
     c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
-    编译失败的.c文件告警跳过; 返回 (成功数, 失败数).
+    编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
-    c_files = []
-    for root, _dirs, files in os.walk(src_root):
-        for name in files:
-            if name.endswith('.c'):
-                c_files.append(os.path.join(root, name))
-    if not c_files:
-        print(f'[ruyituner] {src_root} 下未找到任何 .c 文件.')
+    src_files = []
+    claimed = set()
+    for ext in ('.c', '.i'):
+        for root, _dirs, files in os.walk(src_root):
+            for name in sorted(files):
+                if not name.endswith(ext):
+                    continue
+                src = os.path.join(root, name)
+                stem = os.path.splitext(os.path.relpath(src, src_root))[0]
+                if stem in claimed:
+                    continue
+                claimed.add(stem)
+                src_files.append(src)
+    if not src_files:
+        print(f'[ruyituner] {src_root} 下未找到任何 .c/.i 文件.')
         return 0, 0
 
-    print(f'[ruyituner] 找到 {len(c_files)} 个 .c 文件, 并行生成 IR ...')
+    print(f'[ruyituner] 找到 {len(src_files)} 个 .c/.i 文件, 并行生成 IR ...')
 
     def _work(src):
         rel = os.path.relpath(src, src_root)
@@ -115,7 +129,7 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     ok = 0
     failures = []
     with ThreadPoolExecutor(max_workers=num_workers) as ex:
-        for success, reason in ex.map(_work, c_files):
+        for success, reason in ex.map(_work, src_files):
             if success:
                 ok += 1
             else:
@@ -139,7 +153,7 @@ def main():
                         help='数据集目录 (训练与优化共用)')
     parser.add_argument('--input_type', type=str, required=True,
                         choices=['ll', 'c'],
-                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (先用clang生成.ll再走原路径)')
+                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang生成.ll再走原路径)')
     parser.add_argument('--c_std', type=str, default=None,
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
     parser.add_argument('--c_flags', type=str, default=None,
@@ -202,12 +216,12 @@ def main():
             sys.exit(1)
         std_info = f', C 标准: {args.c_std}' if args.c_std else ''
         flags_info = f', 额外参数: {args.c_flags}' if args.c_flags else ''
-        print(f'[ruyituner] 输入为 c: 使用 clang 生成 .ll ({clang}{std_info}{flags_info})')
+        print(f'[ruyituner] 输入为 c: 使用 clang 把 .c/.i 编译为 .ll ({clang}{std_info}{flags_info})')
         cache_dir = tempfile.mkdtemp(prefix='ruyituner_ir_')
         print(f'[ruyituner] IR 缓存目录: {cache_dir}')
         ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags)
         if ok == 0:
-            print('[ruyituner] 未能从任何 .c 文件生成 .ll, 终止.')
+            print('[ruyituner] 未能从任何 .c/.i 文件生成 .ll, 终止.')
             shutil.rmtree(cache_dir, ignore_errors=True)
             sys.exit(1)
         dataset = cache_dir

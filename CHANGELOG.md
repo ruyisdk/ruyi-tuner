@@ -93,3 +93,4 @@
 - 修复--c_flags以-开头的值（如'-DHAVE_CONFIG_H'）被argparse误认为选项而报"expected one argument"的问题：解析前把"--c_flags <值>"合并为"--c_flags=<值>"，两种写法均可；
 - Readme结构重排：`环境要求`小节移动到`项目简介`之后，`使用说明`更名为`详细说明`，两条环境变量说明合并为一条；Readme工具链需求按输入类型与计数方式分别描述：输入为LLVM IR（`--input_type ll`）仅需opt，输入为C源码（`--input_type c`）还需clang，使用`--count_mode obj-size`还需llc与llvm-size；ruyituner.py使用演示精简：obj-size示例与三个C输入示例合并为一个flex示例（注释合并总结），并补充--count_mode obj-size；注意事项的RISC-V条目补充"在x86环境下"；贡献者补充RuyiTuner V1.x开发者信息；
 - 按照csibe/src/CSiBE-v2.1.1/CSiBE/src目录下的文件内容，完全对应到ruyi-tuner/datasets/x86/c_files/CSiBE-v2.1.1目录下。
+- ruyituner.py 的 C 输入路径新增 .i 文件支持：.i 为预处理后的 C 源码（cc -E 输出），clang 直接按预处理输入编译，无需额外参数；同名 .c 与 .i 并存时优先 .c；CSiBE 的 lwip-0.5.3.preproc 等纯 .i 数据集现可直接作为 --input_type c 的输入（旧式代码建议搭配 --c_std gnu89）；Readme 同步更新工具链需求、参数说明、注意事项与 lwip 使用示例。
