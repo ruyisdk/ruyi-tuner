@@ -16,7 +16,14 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
 
-**使用方式**：输入为数据集目录与 LLVM 工具链路径（opt），输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）；详细使用细节见[使用说明](#使用说明)。
+## 环境要求
+
+- Python 3.7+，依赖 pandas（安装：`pip install pandas`）
+- LLVM 工具链
+  - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
+  - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
+  - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：仅需 opt，无需其他工具；输入文件为 C 源码（`--input_type c`）：还需同一工具链中的 clang（`ninja clang`），用于先将 .c 文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
+- 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
 
 ## 项目结构
 
@@ -46,21 +53,11 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 ├── Readme.md            # 项目说明文档
 ```
 
-## 环境要求
-
-- Python 3.7+，依赖 pandas（安装：`pip install pandas`）
-- LLVM 工具链
-  - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
-  - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
-  - RuyiTuner 默认只用到 opt，构建 LLVM 时执行 `ninja opt` 仅构建该工具即可，能显著节省构建时间；使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）时还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
-- 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。
-- 环境变量（可选）：生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
-
-## 使用说明
+## 详细说明
 
 ### 1. 一键完成训练与优化（ruyituner.py）
 
-ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。
+ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
 
 **使用演示：**
 
@@ -86,31 +83,12 @@ python3 ruyituner.py \
     --only_run \
     --paircsv ./output/Step2_EnumeratedPairs.csv
 
-# 用 .o 文件字节大小作为评分口径（要求工具链同时包含opt与llc）
-python3 ruyituner.py \
-    --dataset ./datasets/x86 \
-    --input_type ll \
-    --llvm_tools_path /llvm_dir/build/bin \
-    --count_mode obj-size
-
-# 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理
-python3 ruyituner.py \
-    --dataset ./datasets/x86/c_files \
-    --input_type c \
-    --llvm_tools_path /llvm_dir/build/bin
-
-# 旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败
-python3 ruyituner.py \
-    --dataset ./datasets/x86/c_files/csibe-v2.1.1/compiler \
-    --input_type c \
-    --llvm_tools_path /llvm_dir/build/bin \
-    --c_std gnu89
-
-# 依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数
+# 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数
 python3 ruyituner.py \
     --dataset ./datasets/x86/c_files/csibe-v2.1.1/flex-2.5.31 \
     --input_type c \
     --llvm_tools_path /llvm_dir/build/bin \
+    --count_mode obj-size \
     --c_std gnu89 \
     --c_flags '-DHAVE_CONFIG_H'
 ```
@@ -246,14 +224,17 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序生成的 .ll 文件；
 - `ruyituner.py` 的 `--input_type c` 要求数据集的 .c 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（生成时加 `-Xclang -disable-O0-optnone`）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
-- 训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链中的 opt（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
+- 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 
 ## 参考文献
 
 - Haolin Pan, Yuanyu Wei, Mingjie Xing, Yanjun Wu, and Chen Zhao. 2025. Towards Efficient Compiler Auto-tuning: Leveraging Synergistic Search Spaces. In Proceedings of the 23rd ACM/IEEE International Symposium on Code Generation and Optimization (CGO '25). Association for Computing Machinery, New York, NY, USA, 614–627. https://doi.org/10.1145/3696443.3708961
 
 ## 贡献者
+
 RuyiTuner V1.0由潘浩林、董津沅开发完成。
+
+RuyiTuner V1.x 由史宁宁开发。
 
 ## 版本
 
