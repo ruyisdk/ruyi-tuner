@@ -85,10 +85,13 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
 
     .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
     同名 .c 与 .i 并存时优先 .c;
+    编译在数据集根目录 (src_root) 下执行, c_flags 中的相对路径 (如 -Iinclude)
+    以数据集根目录为基准解析;
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
     c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
     编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
+    src_root = os.path.abspath(src_root)
     src_files = []
     claimed = set()
     num_c = 0
@@ -130,7 +133,8 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
         if c_std is not None:
             cmd.append(f'-std={c_std}')
         cmd += [src, '-o', dst]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        # 在数据集根目录下执行, 使 c_flags 中的相对路径 (如 -Iinclude) 以数据集根目录为基准解析
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=src_root)
         if proc.returncode != 0:
             lines = [line for line in proc.stderr.splitlines() if line.strip()]
             reason = lines[-1] if lines else f'exit={proc.returncode}'

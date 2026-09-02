@@ -96,3 +96,4 @@
 - ruyituner.py 的 C 输入路径新增 .i 文件支持：.i 为预处理后的 C 源码（cc -E 输出），clang 直接按预处理输入编译，无需额外参数；同名 .c 与 .i 并存时优先 .c；CSiBE 的 lwip-0.5.3.preproc 等纯 .i 数据集现可直接作为 --input_type c 的输入（旧式代码建议搭配 --c_std gnu89）；Readme 同步更新工具链需求、参数说明、注意事项与 lwip 使用示例。
 - scripts/run.py 的每文件评分输出新增编号 [i/N]（Current File [i/N]: xxx），结束时打印评分文件总数（Done: N files scored in total.），便于一眼确认共处理了多少文件；Readme 输出示例同步更新。
 - ruyituner.py 的 C→IR 编译提示区分 .c 与 .i：仅 .c 时输出"找到 N 个 .c 文件"、仅 .i 时输出"找到 N 个 .i 文件"、两者并存时输出"找到 N 个 .c 与 M 个 .i 文件"，不再笼统输出".c/.i 文件"。
+- 修复 --c_flags 中相对路径的解析问题：clang 子进程现在在数据集根目录下执行，相对 -I 路径（如 -Iinclude）以数据集根目录为基准解析；此前相对路径被解析为启动目录下的路径，导致 mpeg2dec 等 autoconf 工程除个别文件外全部因找不到 config.h 而编译失败（修复后 mpeg2dec 29 个文件中 28 个成功，仅 video_out_sdl.c 因缺少系统 SDL 头文件而跳过）；Readme 的 --c_flags 说明同步补充。
