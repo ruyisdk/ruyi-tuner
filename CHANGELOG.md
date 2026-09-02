@@ -94,3 +94,5 @@
 - Readme结构重排：`环境要求`小节移动到`项目简介`之后，`使用说明`更名为`详细说明`，两条环境变量说明合并为一条；Readme工具链需求按输入类型与计数方式分别描述：输入为LLVM IR（`--input_type ll`）仅需opt，输入为C源码（`--input_type c`）还需clang，使用`--count_mode obj-size`还需llc与llvm-size；ruyituner.py使用演示精简：obj-size示例与三个C输入示例合并为一个flex示例（注释合并总结），并补充--count_mode obj-size；注意事项的RISC-V条目补充"在x86环境下"；贡献者补充RuyiTuner V1.x开发者信息；
 - 按照csibe/src/CSiBE-v2.1.1/CSiBE/src目录下的文件内容，完全对应到ruyi-tuner/datasets/x86/c_files/CSiBE-v2.1.1目录下。
 - ruyituner.py 的 C 输入路径新增 .i 文件支持：.i 为预处理后的 C 源码（cc -E 输出），clang 直接按预处理输入编译，无需额外参数；同名 .c 与 .i 并存时优先 .c；CSiBE 的 lwip-0.5.3.preproc 等纯 .i 数据集现可直接作为 --input_type c 的输入（旧式代码建议搭配 --c_std gnu89）；Readme 同步更新工具链需求、参数说明、注意事项与 lwip 使用示例。
+- scripts/run.py 的每文件评分输出新增编号 [i/N]（Current File [i/N]: xxx），结束时打印评分文件总数（Done: N files scored in total.），便于一眼确认共处理了多少文件；Readme 输出示例同步更新。
+- ruyituner.py 的 C→IR 编译提示区分 .c 与 .i：仅 .c 时输出"找到 N 个 .c 文件"、仅 .i 时输出"找到 N 个 .i 文件"、两者并存时输出"找到 N 个 .c 与 M 个 .i 文件"，不再笼统输出".c/.i 文件"。

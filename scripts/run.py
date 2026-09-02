@@ -48,11 +48,11 @@ check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.ll
 total_baseline = 0
 total_after = 0
 
-for filename in filenames:
+for i, filename in enumerate(filenames, start=1):
 
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
-    print("Current File:", filename)  
+    print(f"Current File [{i}/{len(filenames)}]:", filename)  
     path, score, baseline_count, after_count = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
     # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
     total_baseline += baseline_count
@@ -62,4 +62,6 @@ for filename in filenames:
     print("Code Size Reduction Rate: ", f"{score * 100:.2f}%")
     print("Mean Reduction Rate: ", f"{mean * 100:.2f}%")
     print()
+
+print(f"Done: {len(filenames)} files scored in total.")
 

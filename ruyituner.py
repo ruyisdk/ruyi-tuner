@@ -91,6 +91,8 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     """
     src_files = []
     claimed = set()
+    num_c = 0
+    num_i = 0
     for ext in ('.c', '.i'):
         for root, _dirs, files in os.walk(src_root):
             for name in sorted(files):
@@ -102,11 +104,20 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
                     continue
                 claimed.add(stem)
                 src_files.append(src)
+                if ext == '.c':
+                    num_c += 1
+                else:
+                    num_i += 1
     if not src_files:
-        print(f'[ruyituner] {src_root} 下未找到任何 .c/.i 文件.')
+        print(f'[ruyituner] {src_root} 下未找到任何 .c 或 .i 文件.')
         return 0, 0
 
-    print(f'[ruyituner] 找到 {len(src_files)} 个 .c/.i 文件, 并行生成 IR ...')
+    parts = []
+    if num_c:
+        parts.append(f'{num_c} 个 .c')
+    if num_i:
+        parts.append(f'{num_i} 个 .i')
+    print(f"[ruyituner] 找到 {' 与 '.join(parts)} 文件, 并行生成 IR ...")
 
     def _work(src):
         rel = os.path.relpath(src, src_root)

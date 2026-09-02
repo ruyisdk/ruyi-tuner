@@ -205,14 +205,16 @@ python3 run.py \
 - 输出用于优化的Pass序列
 - 打印该序列下的 Code Size Reduction Rate
 - 输出所有文件加权汇总的 Mean Reduction Rate
+- 每个文件的评分结果带编号 `[i/N]`，最后打印评分文件总数，便于确认共处理了多少文件
 
 **输出示例：**
 
 ```text
-Current File: datasets/x86/1_24.ll
+Current File [1/12]: datasets/x86/1_24.ll
 Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
 Code Size Reduction Rate:  1.54%
 Mean Reduction Rate:  6.03%
+Done: 12 files scored in total.
 ```
 
 
