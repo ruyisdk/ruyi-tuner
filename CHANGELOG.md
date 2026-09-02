@@ -91,4 +91,5 @@
 - ruyituner.py新增--c_std可选参数（如--c_std gnu89）：以-std=<值>传给clang，仅--input_type c时生效，不提供时不传-std参数；解决CSiBE中compiler等旧式C代码（K&R/C89）因隐式函数声明在C99+下报错而无法生成.ll的问题；
 - ruyituner.py新增--c_flags可选参数（如--c_flags '-DHAVE_CONFIG_H'）：按空白拆分后原样追加到clang命令，仅--input_type c时生效，不提供时不传；解决flex等依赖autoconf宏的基准无法生成.ll的问题（flexdef.h在HAVE_CONFIG_H未定义时不include标准头，FILE/jmp_buf等类型未知导致大量文件编译失败）；
 - 修复--c_flags以-开头的值（如'-DHAVE_CONFIG_H'）被argparse误认为选项而报"expected one argument"的问题：解析前把"--c_flags <值>"合并为"--c_flags=<值>"，两种写法均可；
-- Readme结构重排：`环境要求`小节移动到`项目简介`之后，`使用说明`更名为`详细说明`，两条环境变量说明合并为一条；Readme工具链需求按输入类型与计数方式分别描述：输入为LLVM IR（`--input_type ll`）仅需opt，输入为C源码（`--input_type c`）还需clang，使用`--count_mode obj-size`还需llc与llvm-size；ruyituner.py使用演示精简：obj-size示例与三个C输入示例合并为一个flex示例（注释合并总结），并补充--count_mode obj-size；注意事项的RISC-V条目补充"在x86环境下"；贡献者补充RuyiTuner V1.x开发者信息。
+- Readme结构重排：`环境要求`小节移动到`项目简介`之后，`使用说明`更名为`详细说明`，两条环境变量说明合并为一条；Readme工具链需求按输入类型与计数方式分别描述：输入为LLVM IR（`--input_type ll`）仅需opt，输入为C源码（`--input_type c`）还需clang，使用`--count_mode obj-size`还需llc与llvm-size；ruyituner.py使用演示精简：obj-size示例与三个C输入示例合并为一个flex示例（注释合并总结），并补充--count_mode obj-size；注意事项的RISC-V条目补充"在x86环境下"；贡献者补充RuyiTuner V1.x开发者信息；
+- 按照csibe/src/CSiBE-v2.1.1/CSiBE/src目录下的文件内容，完全对应到ruyi-tuner/datasets/x86/c_files/CSiBE-v2.1.1目录下。
