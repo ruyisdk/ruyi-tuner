@@ -64,4 +64,9 @@ for i, filename in enumerate(filenames, start=1):
     print()
 
 print(f"Done: {len(filenames)} files scored in total.")
+# 汇总输出全部评分文件的优化前总大小、优化后总大小与整体缩减比例
+overall = (total_baseline - total_after) / total_baseline if total_baseline > 0 else 0.0
+print(f"Total Baseline Size: {total_baseline}")
+print(f"Total Optimized Size: {total_after}")
+print(f"Overall Reduction Rate: {overall * 100:.2f}%")
 
