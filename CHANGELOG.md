@@ -97,3 +97,5 @@
 - scripts/run.py 的每文件评分输出新增编号 [i/N]（Current File [i/N]: xxx），结束时打印评分文件总数（Done: N files scored in total.），便于一眼确认共处理了多少文件；Readme 输出示例同步更新。
 - ruyituner.py 的 C→IR 编译提示区分 .c 与 .i：仅 .c 时输出"找到 N 个 .c 文件"、仅 .i 时输出"找到 N 个 .i 文件"、两者并存时输出"找到 N 个 .c 与 M 个 .i 文件"，不再笼统输出".c/.i 文件"。
 - 修复 --c_flags 中相对路径的解析问题：clang 子进程现在在数据集根目录下执行，相对 -I 路径（如 -Iinclude）以数据集根目录为基准解析；此前相对路径被解析为启动目录下的路径，导致 mpeg2dec 等 autoconf 工程除个别文件外全部因找不到 config.h 而编译失败（修复后 mpeg2dec 29 个文件中 28 个成功，仅 video_out_sdl.c 因缺少系统 SDL 头文件而跳过）；Readme 的 --c_flags 说明同步补充。
+- ruyituner.py 的 C→IR 编译增加数据集目录存在性检查：目录不存在时直接提示"数据集目录不存在: xxx"并终止，不再笼统提示"未找到任何 .c 或 .i 文件"，便于发现路径大小写写错等问题（如把 CSiBE-v2.1.1 误写成小写 csibe-v2.1.1）。
+- ruyituner.py 的 C→IR 编译增加 .i 片段识别：被其他源文件 #include 的 .i 文件（如 jikespg 的 src/lpgact.i 被 lpgparse.c 包含，它只是语法动作片段、引用包含方定义的全局变量）不再单独编译，改为跳过并提示，避免误报为编译失败。

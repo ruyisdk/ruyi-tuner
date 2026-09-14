@@ -36,6 +36,7 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
 
 import argparse
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -85,6 +86,7 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
 
     .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
     同名 .c 与 .i 并存时优先 .c;
+    被其他源文件 #include 的 .i 片段 (如 jikespg 的 lpgact.i) 不单独编译, 跳过并提示;
     编译在数据集根目录 (src_root) 下执行, c_flags 中的相对路径 (如 -Iinclude)
     以数据集根目录为基准解析;
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
@@ -92,6 +94,9 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
     src_root = os.path.abspath(src_root)
+    if not os.path.isdir(src_root):
+        print(f'[ruyituner] 数据集目录不存在: {src_root}')
+        return 0, 0
     src_files = []
     claimed = set()
     num_c = 0
@@ -121,6 +126,44 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     if num_i:
         parts.append(f'{num_i} 个 .i')
     print(f"[ruyituner] 找到 {' 与 '.join(parts)} 文件, 并行生成 IR ...")
+
+    # 部分 .i 文件并非可独立编译的预处理源码, 而是被其他源文件 #include 的
+    # 代码片段 (如 jikespg 的 lpgact.i 被 lpgparse.c 包含, 片段引用的全局变量
+    # 定义在包含方); 单独编译必然失败且无必要, 找出这类片段并跳过
+    include_re = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
+    if num_i:
+        i_names = {os.path.basename(s) for s in src_files if s.endswith('.i')}
+        i_frag = {}
+        scan_done = False
+        for root, _dirs, files in os.walk(src_root):
+            if scan_done:
+                break
+            for name in files:
+                if scan_done:
+                    break
+                if not name.endswith(('.c', '.h', '.i')):
+                    continue
+                path = os.path.join(root, name)
+                try:
+                    with open(path, 'r', errors='ignore') as fh:
+                        for line in fh:
+                            m = include_re.match(line)
+                            if m:
+                                base = os.path.basename(m.group(1))
+                                if base in i_names and base not in i_frag:
+                                    i_frag[base] = path
+                                    if len(i_frag) == len(i_names):
+                                        scan_done = True
+                                        break
+                except OSError:
+                    pass
+        if i_frag:
+            frag_set = set(i_frag)
+            print(f'[ruyituner] 跳过 {len(i_frag)} 个被其他文件 #include 的 .i 代码片段, 不单独编译:')
+            for s in [s for s in src_files if os.path.basename(s) in frag_set]:
+                inc_by = os.path.relpath(i_frag[os.path.basename(s)], src_root)
+                print(f'  - {os.path.relpath(s, src_root)} (被 {inc_by} #include)')
+            src_files = [s for s in src_files if os.path.basename(s) not in frag_set]
 
     def _work(src):
         rel = os.path.relpath(src, src_root)
