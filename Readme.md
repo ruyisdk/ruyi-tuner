@@ -14,7 +14,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
 
-**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
+**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/ll_files/x86 与 datasets/ll_files/riscv 均由 clang 从 C++ 源码生成）。
 
 ## 环境要求
 
@@ -29,10 +29,10 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 ```
 ├── datasets/            # 测试数据集 (.ll IR 与 C 源码)
-│   ├── x86/             # x86架构数据集
-│   │   ├── 1_x_ll/      #   LLVM IR: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
-│   │   └── c_files/     #   C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
-│   └── riscv/           # RISC-V架构数据集: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
+│   ├── ll_files/        # LLVM IR 数据集
+│   │   ├── x86/         #   x86架构: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
+│   │   └── riscv/       #   RISC-V架构: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
+│   └── c_files/         # C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
 ├── output/              # 训练输出结果
 │   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对(已过滤空结果)
 │   ├── Step2_EnumeratedPairs.csv      # 枚举的所有协同对
@@ -64,20 +64,20 @@ ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完�
 ```bash
 # 完整流程：训练 → 用训练得到的协同Pass对做GA优化
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin
 
 # 仅训练，不优化
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
 # 仅优化（复用已有的Step2_EnumeratedPairs.csv）
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
@@ -85,7 +85,7 @@ python3 ruyituner.py \
 
 # 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数
 python3 ruyituner.py \
-    --dataset ./datasets/x86/c_files/csibe-v2.1.1/flex-2.5.31 \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 \
     --input_type c \
     --llvm_tools_path /llvm_dir/build/bin \
     --count_mode obj-size \
@@ -94,7 +94,7 @@ python3 ruyituner.py \
 
 # 预处理后的C源码(.i)数据集（如lwip-0.5.3.preproc）同样支持；旧式代码需--c_std gnu89避免隐式声明报错
 python3 ruyituner.py \
-    --dataset ./datasets/x86/c_files/csibe-v2.1.1/lwip-0.5.3.preproc \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc \
     --input_type c \
     --llvm_tools_path /llvm_dir/build/bin \
     --count_mode obj-size \
@@ -135,14 +135,14 @@ cd scripts
 
 # 手动指定pass列表进行训练（--output_dir也可省略，默认使用项目根目录下的output/）
 python3 train.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
     --passfile ../passes_examples/passes_2210-gen.txt
 
 # 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略,默认使用项目根目录下的output/；pass列表默认不写文件，除非指定--passlist_output）
 python3 train.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output
 
@@ -189,7 +189,7 @@ Code Size Reduction Rate 为 0 的文件同样计入分母、分子贡献为 0�
 ```bash
 cd scripts
 python3 run.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --paircsv ../output/Step2_EnumeratedPairs.csv
 ```
@@ -210,7 +210,7 @@ python3 run.py \
 **输出示例：**
 
 ```text
-Current File [1/12]: datasets/x86/1_24.ll
+Current File [1/12]: datasets/ll_files/x86/1_24.ll
 Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
 Code Size Reduction Rate:  1.54%
 Mean Reduction Rate:  6.03%
@@ -234,7 +234,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序构建的数据集；
 - `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（生成时加 `-Xclang -disable-O0-optnone`）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
-- 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
+- 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 
 ## 参考文献
 

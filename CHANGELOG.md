@@ -100,3 +100,4 @@
 - ruyituner.py 的 C→IR 编译增加数据集目录存在性检查：目录不存在时直接提示"数据集目录不存在: xxx"并终止，不再笼统提示"未找到任何 .c 或 .i 文件"，便于发现路径大小写写错等问题（如把 CSiBE-v2.1.1 误写成小写 csibe-v2.1.1）。
 - ruyituner.py 的 C→IR 编译增加 .i 片段识别：被其他源文件 #include 的 .i 文件（如 jikespg 的 src/lpgact.i 被 lpgparse.c 包含，它只是语法动作片段、引用包含方定义的全局变量）不再单独编译，改为跳过并提示，避免误报为编译失败。
 - scripts/run.py 的结束输出在 Done 行后新增整体汇总：输出全部评分文件的优化前总大小（Total Baseline Size）、优化后总大小（Total Optimized Size）与整体缩减比例（Overall Reduction Rate），便于一眼看到本次优化的总收益。
+- datasets目录结构调整：riscv与x86的.ll文件分别移入datasets/ll_files/riscv与datasets/ll_files/x86，CSiBE源码移入datasets/c_files/CSiBE-v2.1.1；Readme与ruyituner.py使用示例中的路径同步更新。

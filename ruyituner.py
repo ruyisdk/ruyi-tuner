@@ -9,28 +9,28 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
 
 用法示例:
   # 完整流程 (训练 + 优化)
-  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin
 
   # 仅训练 (不优化)
-  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
 
   # 仅优化 (需要已有 Step2_EnumeratedPairs.csv)
-  python3 ruyituner.py --dataset datasets/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step2_EnumeratedPairs.csv
 
   # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang生成.ll到缓存目录, 流程结束自动清理)
-  python3 ruyituner.py --dataset datasets/x86/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
+  python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
 
   # 预处理后的 C 源码 (.i) 数据集, 如 CSiBE 的 lwip-0.5.3.preproc (旧式代码需 --c_std gnu89)
-  python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/lwip-0.5.3.preproc --input_type c \
+  python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --input_type c \
       --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
 
   # 旧式 C 代码 (K&R/C89, 如 CSiBE 的 compiler 基准) 需通过 --c_std 指定 C 标准, 否则隐式函数声明报错
-  python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/compiler --input_type c \
+  python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler --input_type c \
       --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
 
   # 依赖自定义编译宏的项目 (如 flex 需 -DHAVE_CONFIG_H) 可通过 --c_flags 追加 clang 参数
-  python3 ruyituner.py --dataset datasets/x86/c_files/csibe-v2.1.1/flex-2.5.31 --input_type c \
+  python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 --input_type c \
       --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
 """
 
