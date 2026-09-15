@@ -14,7 +14,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
 
-**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/ll_files/x86 与 datasets/ll_files/riscv 均由 clang 从 C++ 源码生成）。
+**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由输入的LLVM目标架构决定，天然支持 x86、RISC-V 等架构。
 
 ## 环境要求
 
@@ -228,6 +228,15 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）。
 
 四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
+
+### 5. 输入支持：LLVM IR 与 C 源码
+
+RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
+
+- **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
+- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark）。工具链需包含 clang，先用 clang 以 `-O0 -S -emit-llvm -Xclang -disable-O0-optnone` 将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过），再进入训练/优化流程，结束后自动清理临时 IR。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
+
+CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。
 
 ## 注意事项
 
