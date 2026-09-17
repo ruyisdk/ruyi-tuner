@@ -105,3 +105,6 @@
 - scripts/run.py 的每文件评分输出在 Code Size Reduction Rate 前新增两行：基线大小（`<优化等级> Baseline Size`，按用户指定的 --opt-level，默认 Oz）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`）；Readme 输出示例同步更新。
 - 修复 RuyiTuner Optimized Size 显示带小数尾巴的问题：utils/GA.py 中由得分反推的优化后大小改为取整（代码大小本身是整数，此前 `baseline_count * (1.0 - best_cost)` 会产生 13127.0 这类浮点值）；run.py 的整体汇总（Total Baseline Size / Total Optimized Size）累加时同样取整，保证汇总行不带小数。
 - Readme新增`输入支持：LLVM IR 与 C 源码`小节（详细说明第5节）：说明--input_type ll/c两类输入的数据集布局（datasets/ll_files与datasets/c_files）、工具链需求与处理流程，并添加指向RunCSiBE.md的链接。
+
+### 1.8版本变更
+- 新增 --search_scope 参数（ruyituner.py/run.py，默认 file）：控制为每个文件各找一个最优 pass 序列（file，走现有流程）还是为整个项目找一个（project）；project 模式尚未实现，目前仅输出"尚未实现"提示后退出；Readme 参数说明同步更新。

@@ -22,8 +22,14 @@ parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to 
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
 parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
 parser.add_argument("--count_mode", type=str, default="auto", choices=["auto", "opt-stats", "text", "obj-size"], help="instruction counting mode for scoring (default: auto)")
+parser.add_argument("--search_scope", type=str, default="file", choices=["file", "project"], help="search scope of the optimal pass sequence: file (per-file, default) or project (per-project, not implemented yet)")
 
 args = parser.parse_args()
+
+# 按项目搜索最优 pass 序列尚未实现, 直接提示后退出
+if args.search_scope == 'project':
+    print("为一个项目寻找一个最优的 pass 序列的功能尚未实现。")
+    sys.exit(0)
 
 print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 

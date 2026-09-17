@@ -113,6 +113,7 @@ python3 ruyituner.py \
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file（为每个文件各找一个，走现有流程）；project=为整个项目找一个，尚未实现，仅输出提示后退出
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -200,6 +201,7 @@ python3 run.py \
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file；project（为整个项目找一个）尚未实现，仅输出提示后退出
 
 **输出：**
 - 输出用于优化的Pass序列

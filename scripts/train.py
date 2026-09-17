@@ -313,7 +313,7 @@ if args.output_dir is None:
     os.makedirs(args.output_dir, exist_ok=True)
     print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
-print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
+print("计数方式:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
 """
 Step 1. Find synergistic pairs and save to Step1 CSV
