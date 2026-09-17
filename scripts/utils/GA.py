@@ -155,8 +155,9 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', c
             best_path = final_fitness_scores[0][1]
             best_cost = final_fitness_scores[0][0]
             # 由得分反推最优路径的优化后大小, 避免重复运行 opt;
-            # 得分为 0 (含浮点误差下的微小负值) 时, 优化后大小与基线一致, 不反超基线
-            after_count = baseline_count if best_cost <= 0 else baseline_count * (1.0 - best_cost)
+            # 得分为 0 (含浮点误差下的微小负值) 时, 优化后大小与基线一致, 不反超基线;
+            # 大小本身是整数(字节数/指令数), 对反推值取整避免输出 13127.0 这类带小数尾巴的值
+            after_count = baseline_count if best_cost <= 0 else round(baseline_count * (1.0 - best_cost))
             return best_path, best_cost, baseline_count, after_count
         
         # 返回 (最优路径, 得分, 基线大小, 优化后大小), 供调用方汇总计算平均缩减率

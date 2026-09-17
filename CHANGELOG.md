@@ -102,4 +102,6 @@
 - scripts/run.py 的结束输出在 Done 行后新增整体汇总：输出全部评分文件的优化前总大小（Total Baseline Size）、优化后总大小（Total Optimized Size）与整体缩减比例（Overall Reduction Rate），便于一眼看到本次优化的总收益。
 - datasets目录结构调整：riscv与x86的.ll文件分别移入datasets/ll_files/riscv与datasets/ll_files/x86，CSiBE源码移入datasets/c_files/CSiBE-v2.1.1；Readme与ruyituner.py使用示例中的路径同步更新。
 - 新增RunCSiBE.md：记录CSiBE v2.1.1下19个benchmark在x86与riscv工具链上的运行命令与实测平均优化率（含各项目所需的--c_std gnu89与--c_flags参数，以及linux-2.4.23-pre3-testplatform等项目的编译失败统计与说明）。
+- scripts/run.py 的每文件评分输出在 Code Size Reduction Rate 前新增两行：基线大小（`<优化等级> Baseline Size`，按用户指定的 --opt-level，默认 Oz）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`）；Readme 输出示例同步更新。
+- 修复 RuyiTuner Optimized Size 显示带小数尾巴的问题：utils/GA.py 中由得分反推的优化后大小改为取整（代码大小本身是整数，此前 `baseline_count * (1.0 - best_cost)` 会产生 13127.0 这类浮点值）；run.py 的整体汇总（Total Baseline Size / Total Optimized Size）累加时同样取整，保证汇总行不带小数。
 - Readme新增`输入支持：LLVM IR 与 C 源码`小节（详细说明第5节）：说明--input_type ll/c两类输入的数据集布局（datasets/ll_files与datasets/c_files）、工具链需求与处理流程，并添加指向RunCSiBE.md的链接。

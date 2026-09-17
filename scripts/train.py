@@ -264,9 +264,9 @@ def generate_passlist(args, write_default=True):
             f.write('\n'.join(lines) + ('\n' if lines else ''))
 
     if out_path is not None:
-        print(f'\n生成完成: {out_path} (共 {len(lines)} 个 pass)')
+        print(f'生成完成: {out_path} (共 {len(lines)} 个 pass)。')
     else:
-        print(f'\n生成完成: 共 {len(lines)} 个 pass (未写文件, 仅用于本次训练)')
+        print(f'生成完成: 共 {len(lines)} 个 pass (未写文件, 仅用于本次训练)。')
     # 被剔除 pass 的具体清单与原因默认不打印, 避免输出过长;
     # 设置环境变量 RUYITUNER_SHOW_EXCLUDED_PASSES=1 可恢复逐条输出
     show_excluded = os.environ.get('RUYITUNER_SHOW_EXCLUDED_PASSES') == '1'
@@ -274,12 +274,12 @@ def generate_passlist(args, write_default=True):
         if not dropped_items:
             continue
         if show_excluded:
-            print(f'\n因{label}剔除 {len(dropped_items)} 个:')
+            print(f'因 {label} 剔除 {len(dropped_items)} 个:')
             for name, reason in dropped_items:
                 print(f'  - {name}: {reason}')
         else:
-            print(f'\n因{label}剔除 {len(dropped_items)} 个 (设置 RUYITUNER_SHOW_EXCLUDED_PASSES=1 查看具体清单与原因)')
-    print('\n成功生成pass列表！')
+            print(f'因 {label} 剔除 {len(dropped_items)} 个 (设置 RUYITUNER_SHOW_EXCLUDED_PASSES=1 查看具体清单与原因)。')
+    print('成功生成 pass 列表！')
     return lines
 
 

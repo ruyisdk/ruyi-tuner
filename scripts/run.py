@@ -55,10 +55,12 @@ for i, filename in enumerate(filenames, start=1):
     print(f"Current File [{i}/{len(filenames)}]:", filename)  
     path, score, baseline_count, after_count = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
     # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
-    total_baseline += baseline_count
-    total_after += after_count
+    total_baseline += int(baseline_count)
+    total_after += int(after_count)
     mean = (total_baseline - total_after) / total_baseline if total_baseline > 0 else 0.0
     print("Path: ", path if score != 0 else [])
+    print(f"{args.opt_level} Baseline Size: {baseline_count}")
+    print(f"RuyiTuner Optimized Size: {after_count}")
     print("Code Size Reduction Rate: ", f"{score * 100:.2f}%")
     print("Mean Reduction Rate: ", f"{mean * 100:.2f}%")
     print()

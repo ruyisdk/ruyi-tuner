@@ -204,6 +204,7 @@ python3 run.py \
 **输出：**
 - 输出用于优化的Pass序列
 - 打印该序列下的 Code Size Reduction Rate
+- 输出该文件的基线大小（`<优化等级> Baseline Size`）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`），便于与缩减率相互对照
 - 输出所有文件加权汇总的 Mean Reduction Rate
 - 每个文件的评分结果带编号 `[i/N]`，最后打印评分文件总数，便于确认共处理了多少文件
 
@@ -212,6 +213,8 @@ python3 run.py \
 ```text
 Current File [1/12]: datasets/ll_files/x86/1_24.ll
 Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
+Oz Baseline Size: 3124
+RuyiTuner Optimized Size: 3076
 Code Size Reduction Rate:  1.54%
 Mean Reduction Rate:  6.03%
 Done: 12 files scored in total.
