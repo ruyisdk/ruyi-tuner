@@ -232,7 +232,7 @@ def main():
                         help='指令计数方式开关 (传给 train.py 与 run.py): auto(默认) | opt-stats | text | obj-size')
     parser.add_argument('--search_scope', type=str, default='file',
                         choices=['file', 'project'],
-                        help='最优 pass 序列的搜索范围: file=为每个文件各找一个 (默认, 走现有流程), project=为整个项目找一个 (尚未实现, 仅输出提示)')
+                        help='最优 pass 序列的搜索范围: file=为每个文件各找一个 (默认), project=为整个项目找一条公共序列 (聚合适应度 GA)')
     parser.add_argument('--passlist_output', type=str, default=None,
                         help='把自动生成的 pass 列表写入该文件 (传给 train.py)')
     parser.add_argument('--no_parse_check', action='store_true',
@@ -292,11 +292,6 @@ def main():
         dataset = args.dataset
 
     try:
-        # 按项目搜索最优 pass 序列尚未实现, 提示后退出 (放在训练之前, 避免白跑训练)
-        if args.search_scope == 'project':
-            print('[ruyituner] 为一个项目寻找一个最优的 pass 序列的功能尚未实现。')
-            sys.exit(0)
-
         out_dir = args.output_dir or DEFAULT_OUTPUT_DIR
 
         if not args.only_run:

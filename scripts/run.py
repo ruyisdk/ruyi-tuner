@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(current_file_path))
 sys.path.append(project_root)
 # scripts/ 目录, 保证从任意工作目录运行时都能 import utils
 sys.path.insert(0, os.path.dirname(current_file_path))
-from utils.GA import LeverageSyner_GA_codesize
+from utils.GA import LeverageSyner_GA_codesize_file, LeverageSyner_GA_codesize_project
 from utils.common import get_inst_count_method, check_dataset_arch_matches_opt
 
 parser = ap.ArgumentParser()
@@ -22,16 +22,11 @@ parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to 
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
 parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
 parser.add_argument("--count_mode", type=str, default="auto", choices=["auto", "opt-stats", "text", "obj-size"], help="instruction counting mode for scoring (default: auto)")
-parser.add_argument("--search_scope", type=str, default="file", choices=["file", "project"], help="search scope of the optimal pass sequence: file (per-file, default) or project (per-project, not implemented yet)")
+parser.add_argument("--search_scope", type=str, default="file", choices=["file", "project"], help="search scope of the optimal pass sequence: file (per-file, default) or project (one common sequence for all files)")
 
 args = parser.parse_args()
 
-# 按项目搜索最优 pass 序列尚未实现, 直接提示后退出
-if args.search_scope == 'project':
-    print("为一个项目寻找一个最优的 pass 序列的功能尚未实现。")
-    sys.exit(0)
-
-print("Instruction counting method:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
+print("计数方式:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
 df = pd.read_csv(args.paircsv)
 pairlist= df["synerpair"].tolist()
@@ -49,6 +44,22 @@ else:
 # 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
 check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.llvm_tools_path, 'opt'))
 
+if args.search_scope == 'project':
+    # 项目模式: 为全部输入文件寻找一条公共的最优 pass 序列 (聚合适应度 GA)
+    file_codes = []
+    for filename in filenames:
+        with open(filename, 'r') as ll_file:
+            file_codes.append((str(filename), ll_file.read()))
+    path, score, total_baseline, total_after = LeverageSyner_GA_codesize_project(
+        pairlist, file_codes, llvm_tools_path=args.llvm_tools_path,
+        opt_level=args.opt_level, count_mode=args.count_mode)
+    print("Path: ", path if score != 0 else [])
+    print("Total Baseline Size: ", total_baseline)
+    print("Total Optimized Size: ", total_after)
+    print("Overall Reduction Rate: ", f"{score * 100:.2f}%")
+    print(f"Done: one common pass sequence for {len(file_codes)} files.")
+    sys.exit(0)
+
 # 汇总所有文件的基线大小与优化后大小, 整体平均缩减率 = (Σ基线 - Σ优化后) / Σ基线;
 # 缩减率为0的文件同样计入分母, 会拉低整体平均缩减率
 total_baseline = 0
@@ -59,7 +70,7 @@ for i, filename in enumerate(filenames, start=1):
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print(f"Current File [{i}/{len(filenames)}]:", filename)  
-    path, score, baseline_count, after_count = LeverageSyner_GA_codesize(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
+    path, score, baseline_count, after_count = LeverageSyner_GA_codesize_file(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
     # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
     total_baseline += int(baseline_count)
     total_after += int(after_count)

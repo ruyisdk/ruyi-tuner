@@ -2,9 +2,15 @@
 
 本文档为RuyiTuner运行datasets/c_files/CSiBE-v2.1.1下各个项目的详细说明，每个项目都给出了运行的具体命令参数，运行过程中注意替换工具链路径为本地路径。
 
+本文档列出的命令均未加 --search_scope 参数，默认走 file 模式：为每个文件各找一条最优 pass 序列，文中"平均优化率"即该模式下全部文件加权汇总的整体缩减率。若要为整个项目找一条公共的最优 pass 序列，在命令末尾追加 --search_scope project 即可（该模式输出一条公共 Path 与整体缩减率 Overall Reduction Rate），例如：
+
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
 bzip2-1.0.2、cg_compiler_opensrc、compiler、jikespg-1.3、lwip-0.5.3.preproc、mpgcut-1.1、replaypc-0.4.0.preproc、ttt-0.10.1.preproc、zlib-1.1.4，这9个项目，只需要添加--c_std gnu89 之后，正常的配置参数运行即可。
 
 flex-2.5.31、jpeg-6b、libmspack、libpng-1.2.5、linux-2.4.23-pre3-testplatform、mpeg2dec-0.3.1、OpenTCP-1.0.4、teem-1.6.0-src、unrarlib-0.4.0则需要一些额外的--c_flags参数。
+
+本次测试采用的是LLVM22.1.0-rc2的x86和RISC-V版本。
 
 具体如下：
 

@@ -113,7 +113,7 @@ python3 ruyituner.py \
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）
-- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file（为每个文件各找一个，走现有流程）；project=为整个项目找一个，尚未实现，仅输出提示后退出
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file（为每个文件各找一个，走现有流程）；project=为整个项目找一条公共序列（聚合适应度GA，按文件大小加权的整体缩减率评分）
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -177,7 +177,9 @@ python3 train.py \
 
 **遗传算法简介：** GA 模拟自然选择过程——把一条 Pass 序列当作"个体"，其适应度是该序列对代码体积的缩减程度；算法维护一个种群，每代通过选择(保留高适应度个体)、交叉(交换两条序列的片段)、变异(随机扩展序列)产生新种群，迭代若干代后输出最优个体。RuyiTuner 的默认参数为：种群规模 100、迭代 10 代、变异率 0.5、每代保留前 10% 精英个体。
 
-**整体优化过程：** 以 Step2 中的协同对为有向边构建搜索图（节点是 Pass，边表示"先 A 后 B"的协同关系）；初始种群在图中随机游走生成长度不超过 2 的序列，之后通过多代交叉与变异不断进化。每个个体都会被真正执行一遍（`opt -passes=<序列>`）并按指令数打分。对数据集中的每个 .ll 文件独立运行一次 GA，输出该文件的最优 Pass 序列与得分。
+**整体优化过程：** 默认情况下，`--search_scope file`，以 Step2 中的协同对为有向边构建搜索图（节点是 Pass，边表示"先 A 后 B"的协同关系）；初始种群在图中随机游走生成长度不超过 2 的序列，之后通过多代交叉与变异不断进化。每个个体都会被真正执行一遍（`opt -passes=<序列>`）并按指令数打分。对数据集中的每个 .ll 文件独立运行一次 GA，输出该文件的最优 Pass 序列与得分。
+
+`--search_scope project` 时行为不同：为全部输入文件寻找一条公共的最优 Pass 序列——GA 适应度改为按文件大小加权的整体缩减率 `(Σ基线 − Σ优化后) / Σ基线`（与 Mean Reduction Rate 同口径），序列在个别文件上 opt 失败时回退原始 IR 计数（视为无收益，会被自然惩罚）；最终输出公共 Pass 序列、总基线大小、总优化后大小与整体缩减率，不再逐文件输出。
 
 **评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数（`--count_mode obj-size` 下为 .o 文件的 .text 段字节大小）；每个文件的 Code Size Reduction Rate = (基线 - GA序列优化后) / 基线。Code Size Reduction Rate 为正表示 GA 序列比基线更短（有效改进，例如 10% 表示再少 10%）；为 0 表示与基线持平；最优个体为负时不输出（负值与比基线更差的路径没有意义，按无收益记 0%）；为 100% 属于异常（模块被清空，通常是 internalize 类 pass 导致）。Mean Reduction Rate 是所有文件按大小加权汇总的整体平均缩减率：
 
@@ -201,16 +203,26 @@ python3 run.py \
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
-- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file；project（为整个项目找一个）尚未实现，仅输出提示后退出
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file；project=为整个项目找一条公共序列，输出公共序列与整体缩减率，不再逐文件输出
 
-**输出：**
-- 输出用于优化的Pass序列
-- 打印该序列下的 Code Size Reduction Rate
-- 输出该文件的基线大小（`<优化等级> Baseline Size`）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`），便于与缩减率相互对照
-- 输出所有文件加权汇总的 Mean Reduction Rate
-- 每个文件的评分结果带编号 `[i/N]`，最后打印评分文件总数，便于确认共处理了多少文件
+**输出：** 两种 `--search_scope` 模式的输出不同：
+
+`--search_scope file`（默认，为每个文件各找一条最优 Pass 序列，逐文件输出）：
+- 每个文件的评分结果带编号 `[i/N]`（`Current File [i/N]: xxx`）
+- 输出该文件的最优 Pass 序列（`Path`）
+- 输出该文件的基线大小（`<优化等级> Baseline Size`，按 `--opt-level`，默认 Oz）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`），便于与缩减率相互对照
+- 打印该序列下的 `Code Size Reduction Rate` 与所有文件加权汇总的 `Mean Reduction Rate`
+- 最后打印评分文件总数（`Done: N files scored in total.`）
+
+`--search_scope project`（为全部文件找一条公共的最优 Pass 序列，整体输出一次）：
+- 开头打印本次使用的计数方式（`计数方式: xxx`，由 `--count_mode` 决定）
+- 输出公共 Pass 序列（`Path`）
+- 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
+- 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
+- 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**
+- `--search_scope file` 模式：
 
 ```text
 Current File [1/12]: datasets/ll_files/x86/1_24.ll
@@ -222,6 +234,17 @@ Mean Reduction Rate:  6.03%
 Done: 12 files scored in total.
 ```
 
+- `--search_scope project` 模式：
+```text
+计数方式: obj-size
+Path:  ['loop(loop-rotate)', 'function(mem2reg)', 'function(gvn-hoist)', 'function(structurizecfg)', 'function(tailcallelim)', 'module(attributor)', 'function(sroa)', 'module(ipsccp)', 'function(gvn-hoist)', 'module(scc-oz-module-inliner)', 'function(dse)', 'function(lower-switch)', 'module(globalopt)', 'function(gvn)', 'function(simplifycfg)', 'function(instcombine)', 'function(gvn-hoist)']
+Total Baseline Size:  32518
+Total Optimized Size:  22157
+Overall Reduction Rate:  31.86%
+Done: one common pass sequence for 6 files.
+[ruyituner] 全部完成.
+[ruyituner] 已清理 IR 缓存目录: /tmp/ruyituner_ir_yy9el4vp
+```
 
 ### 4. 指令计数方式（--count_mode）
 

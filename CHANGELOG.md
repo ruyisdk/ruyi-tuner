@@ -108,3 +108,6 @@
 
 ### 1.8版本变更
 - 新增 --search_scope 参数（ruyituner.py/run.py，默认 file）：控制为每个文件各找一个最优 pass 序列（file，走现有流程）还是为整个项目找一个（project）；project 模式尚未实现，目前仅输出"尚未实现"提示后退出；Readme 参数说明同步更新。
+- 实现 --search_scope project 模式（聚合适应度 GA 方案）：utils/GA.py 抽出通用 GA 搜索核心 _ga_search，并新增 LeverageSyner_GA_codesize_project——适应度改为按文件大小加权的整体缩减率 (Σ基线−Σ优化后)/Σ基线，序列在个别文件上 opt 失败时回退原始 IR 计数，另加 (文件,序列)→大小 缓存减少重复 opt 运行；run.py 的 project 分支输出公共 pass 序列、总基线/优化后大小与整体缩减率；ruyituner.py 移除"尚未实现"提示，project 模式可走完训练+优化全流程；Readme 参数说明与优化阶段描述同步更新。
+- utils/GA.py 的单文件 GA 函数 LeverageSyner_GA_codesize 更名为 LeverageSyner_GA_codesize_file，与项目模式的 LeverageSyner_GA_codesize_project 对应；run.py 的调用同步更新。
+- RunCSiBE.md 补充 --search_scope 说明：文中命令默认 file 模式（平均优化率为全部文件加权汇总的整体缩减率），并给出追加 --search_scope project 的示例命令。
