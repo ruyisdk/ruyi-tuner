@@ -233,6 +233,8 @@ def main():
     parser.add_argument('--search_scope', type=str, default='file',
                         choices=['file', 'project'],
                         help='最优 pass 序列的搜索范围: file=为每个文件各找一个 (默认), project=为整个项目找一条公共序列 (聚合适应度 GA)')
+    parser.add_argument('--max-path-length', type=int, default=2,
+                        help='GA 初始种群中 pass 序列的最大长度, 默认 2 (传给 run.py)')
     parser.add_argument('--passlist_output', type=str, default=None,
                         help='把自动生成的 pass 列表写入该文件 (传给 train.py)')
     parser.add_argument('--no_parse_check', action='store_true',
@@ -315,7 +317,8 @@ def main():
                        '--paircsv', paircsv,
                        '--opt-level', args.opt_level,
                        '--count_mode', args.count_mode,
-                       '--search_scope', args.search_scope]
+                       '--search_scope', args.search_scope,
+                       '--max-path-length', str(args.max_path_length)]
             print('=' * 60)
             print(f'[ruyituner] 阶段 2/2: GA 优化 (数据集: {dataset}, 协同对: {paircsv})')
             print('=' * 60)

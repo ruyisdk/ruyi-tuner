@@ -23,6 +23,7 @@ parser.add_argument("--paircsv", type=str, required=True, help="the synergistic 
 parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
 parser.add_argument("--count_mode", type=str, default="auto", choices=["auto", "opt-stats", "text", "obj-size"], help="instruction counting mode for scoring (default: auto)")
 parser.add_argument("--search_scope", type=str, default="file", choices=["file", "project"], help="search scope of the optimal pass sequence: file (per-file, default) or project (one common sequence for all files)")
+parser.add_argument("--max-path-length", type=int, default=2, help="maximum length of initial GA sequences in number of passes (default: 2)")
 
 args = parser.parse_args()
 
@@ -52,7 +53,8 @@ if args.search_scope == 'project':
             file_codes.append((str(filename), ll_file.read()))
     path, score, total_baseline, total_after = LeverageSyner_GA_codesize_project(
         pairlist, file_codes, llvm_tools_path=args.llvm_tools_path,
-        opt_level=args.opt_level, count_mode=args.count_mode)
+        opt_level=args.opt_level, count_mode=args.count_mode,
+        max_path_length=args.max_path_length)
     print("Path: ", path if score != 0 else [])
     print("Total Baseline Size: ", total_baseline)
     print("Total Optimized Size: ", total_after)
@@ -70,7 +72,7 @@ for i, filename in enumerate(filenames, start=1):
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print(f"Current File [{i}/{len(filenames)}]:", filename)  
-    path, score, baseline_count, after_count = LeverageSyner_GA_codesize_file(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode)
+    path, score, baseline_count, after_count = LeverageSyner_GA_codesize_file(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode, max_path_length=args.max_path_length)
     # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
     total_baseline += int(baseline_count)
     total_after += int(after_count)

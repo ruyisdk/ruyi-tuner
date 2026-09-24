@@ -119,7 +119,7 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
 
 
-def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto'):
+def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2):
         # 基线: 按用户指定的优化等级(opt_level, 默认Oz)优化后的指令数/代码大小
         baseline_count = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
         if(baseline_count == 0):
@@ -143,7 +143,7 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         GENERATIONS = 10
         MUTATION_RATE = 0.5
         SELECTION_RATE = 0.1
-        MAX_PATH_LENGTH = 2  # 限制路径的最大长度
+        # 序列最大长度由 max_path_length 参数控制 (默认 2)
 
         # 单文件适应度: 相对指定优化等级基线的缩减比例
         def fitness_function(path):
@@ -153,7 +153,7 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         best_cost, best_path = _ga_search(graph, nodes, fitness_function,
                                           population_size=POPULATION_SIZE, generations=GENERATIONS,
                                           mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
-                                          max_length=MAX_PATH_LENGTH)
+                                          max_length=max_path_length)
         # 仅在输出时加非负约束: 最优得分为负时, 负值与对应路径没有意义,
         # 按无收益输出空路径与0分; 不改变适应度计算与选择过程
         if best_cost < 0:
@@ -166,7 +166,7 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         return best_path, best_cost, baseline_count, after_count
 
 
-def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto'):
+def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2):
     """为项目(全部输入文件)寻找一条公共的最优 pass 序列 (聚合适应度 GA).
 
     file_codes: [(文件名, .ll 源码), ...];
@@ -208,7 +208,7 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     GENERATIONS = 10
     MUTATION_RATE = 0.5
     SELECTION_RATE = 0.1
-    MAX_PATH_LENGTH = 2  # 限制路径的最大长度
+    # 序列最大长度由 max_path_length 参数控制 (默认 2)
 
     # (文件下标, 序列) -> 优化后大小 的缓存: 不同个体/代数之间的序列大量重复,
     # 缓存可避免重复运行 opt; 多线程下加锁避免同一序列重复计算
@@ -237,7 +237,7 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     best_cost, best_path = _ga_search(graph, nodes, aggregate_fitness,
                                       population_size=POPULATION_SIZE, generations=GENERATIONS,
                                       mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
-                                      max_length=MAX_PATH_LENGTH)
+                                      max_length=max_path_length)
     # 输出时加非负约束 (与单文件模式一致): 最优得分为负时按无收益输出空路径与 0 分
     if best_cost < 0:
         return [], 0.0, total_baseline, total_baseline
