@@ -78,7 +78,7 @@ def _default_project_name():
 def write_project_passlist(path, project_name, output_dir):
     '''把项目模式找到的最优 pass 序列写入 output_dir/Step3_<项目名>_PassList.csv.
 
-    每行一个 pass, 保持序列顺序 (可直接逗号连接后交给 ruyi-cc.sh);
+    每行一个 pass, 保持序列顺序 (可直接逗号连接后用于实际编译);
     序列为空 (无收益) 时不写文件, 只提示.'''
     if not path:
         print('最优序列为空, 不写出 Step3 Pass 列表.')
@@ -127,7 +127,7 @@ if args.search_scope == 'project':
     print("Total Baseline Size: ", total_baseline)
     print("Total Optimized Size: ", total_after)
     print("Overall Reduction Rate: ", f"{score * 100:.2f}%")
-    # 把最优 pass 序列写入 Step3_<项目名>_PassList.csv, 供 ruyi-cc.sh 等直接使用
+    # 把最优 pass 序列写入 Step3_<项目名>_PassList.csv, 供实际编译对比阶段直接使用
     write_project_passlist(final_path, project_name, out_dir_run)
     # 基线/优化后大小/缩减率写入 Step3_<项目名>_Result.json, 供实际编译对比复用 (不重新计算)
     if final_path:

@@ -9,7 +9,7 @@ ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目�
   3. 实际编译对比 (仅 --input_type c 且 --search_scope project): 用 GA 找到的最优
      序列 (output/Step3_<项目名>_PassList.csv) 实际编译源码, .o 输出到
      output/<项目名>/, 基线复用优化阶段写出的 Step3_<项目名>_Result.json,
-     最终输出实际代码体积缩减率 (与 ruyi-cc.sh 的编译管线一致).
+     最终输出实际代码体积缩减率 (与评分口径一致).
 
 用法示例:
   # 完整流程 (训练 + 优化)
@@ -248,7 +248,7 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
     ll_items: [(相对路径, .ll 缓存文件, 源文件), ...]; 前端 IR 直接复用 C→IR
     阶段生成的 .ll, 不再重复运行 clang 前端; 后续管线与评分口径一致:
     opt -S -passes=<序列> -> llc -relocation-model=pic -filetype=obj;
-    任一环节失败时回退 clang -<level> -c 直通编译 (与 ruyi-cc.sh 的回退行为
+    任一环节失败时回退 clang -<level> -c 直通编译 (与评分口径的回退策略
     一致); 返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
     bin_dir = llvm_tools_path or ''
     opt_path = os.path.join(bin_dir, 'opt') if bin_dir else 'opt'
