@@ -33,7 +33,8 @@ sys.path.append(project_root)
 sys.path.insert(0, os.path.dirname(current_file_path))
 
 from utils.PassSyner import PassSyner
-from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt
+from utils.common import (get_inst_count, get_inst_count_method,
+                          check_dataset_arch_matches_opt, KNOWN_MISCOMPILE_PATTERN)
 
 # ============================================================================
 # pass 列表生成
@@ -191,7 +192,8 @@ def generate_passlist(args, write_default=True):
     version = get_opt_version(opt_path)
     print(f'opt 版本: {version} ({opt_path})')
 
-    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN), ('内部化类', INTERNALIZE_PATTERN)]
+    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN), ('内部化类', INTERNALIZE_PATTERN),
+                        ('已知误编译类', KNOWN_MISCOMPILE_PATTERN)]
     if not args.keep_instrumentation:
         exclude_patterns.append(('插桩类', INSTRUMENTATION_PATTERN))
     if args.extra_exclude:

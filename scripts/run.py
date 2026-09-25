@@ -15,7 +15,7 @@ sys.path.append(project_root)
 # scripts/ 目录, 保证从任意工作目录运行时都能 import utils
 sys.path.insert(0, os.path.dirname(current_file_path))
 from utils.GA import LeverageSyner_GA_codesize_file, LeverageSyner_GA_codesize_project
-from utils.common import get_inst_count_method, check_dataset_arch_matches_opt
+from utils.common import get_inst_count_method, check_dataset_arch_matches_opt, KNOWN_MISCOMPILE_PATTERN
 
 parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
@@ -68,6 +68,25 @@ df = pd.read_csv(args.paircsv)
 pairlist= df["synerpair"].tolist()
 # 将列表中的元素由str转换为元组
 pairlist = [eval(pair) for pair in pairlist]
+
+# 剔除包含已知误编译 pass 的协同对 (如 cgscc(attributor-cgscc)/function(structurizecfg),
+# 实测会产出功能损坏的代码或使 opt 崩溃), 防止 GA 选中它们; 使用旧 CSV 时同样生效
+if pairlist:
+    kept = []
+    for pair in pairlist:
+        bad = False
+        for node in pair:
+            inner = node[node.find('(') + 1:node.rfind(')')]
+            base = inner.split('<', 1)[0]
+            if KNOWN_MISCOMPILE_PATTERN.match(base):
+                bad = True
+                break
+        if not bad:
+            kept.append(pair)
+    removed = len(pairlist) - len(kept)
+    if removed:
+        print(f"已剔除含已知误编译 pass 的协同对: {removed} 个, 剩余 {len(kept)} 个.")
+    pairlist = kept
 
 
 if os.path.isdir(args.dataset):

@@ -254,7 +254,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
 - `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
 - `text`：强制按 IR 文本缩进规律统计指令行数；
-- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
+- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积；llc 默认使用 pic 重定位模型，与 clang 在 x86_64/riscv64 Linux 上的默认代码生成一致，避免 static 口径少算 PLT/GOT 间接寻址开销）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
 
 四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
 
@@ -272,6 +272,7 @@ CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.
 - 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序构建的数据集；
 - `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（以 `--opt-level O0` 生成时加 `-Xclang -disable-O0-optnone`，其余优化等级前端不会产生该属性）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
+- 训练生成 pass 列表与优化阶段筛选协同对时默认剔除已知误编译 pass（`structurizecfg`、`attributor`、`attributor-cgscc`）：实测 LLVM 21.1.8/22.1.0 上 `structurizecfg` 单独作用于 -Oz 级 IR 会产出功能损坏的 .o（bzip2.c 链接出的 bzip2 运行时 PANIC），`attributor`/`attributor-cgscc` 会使 opt 段错误（attributor-light 系列实测无此问题，保留）；
 - 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 
 ## 参考文献

@@ -23,6 +23,15 @@ _STATS_TOTAL_INSTS_RE = re.compile(
 # 已探测过的 opt 路径 -> 是否支持 -stats (None 不在缓存里表示未探测)
 _opt_stats_support = {}
 
+# 已知会误编译/崩溃的 pass (实测 LLVM 21.1.8 与 22.1.0):
+#   structurizecfg 单独作用于 -Oz 级 IR 会产出功能损坏的 .o (bzip2.c 实测,
+#   压缩流模式被改坏, 链接出的 bzip2 运行时 PANIC "compress: bad modes");
+#   attributor/attributor-cgscc 在部分文件上使 opt 段错误 (bzip2 的 bzlib.c
+#   实测, 崩溃点 AAInvariantLoadPointerCallSiteReturned::initialize);
+#   attributor-light/attributor-light-cgscc 实测无崩溃, 不排除.
+# 训练生成 pass 列表与优化阶段筛选协同对时默认剔除, 防止 GA 选中它们.
+KNOWN_MISCOMPILE_PATTERN = re.compile(r'^(attributor|attributor-cgscc|structurizecfg)$')
+
 
 def _opt_supports_stats(opt_path):
     '''探测 opt 是否支持 `-passes=instcount -stats` (需要 LLVM_FORCE_ENABLE_STATS=ON 构建).
@@ -81,6 +90,10 @@ def get_object_size(ir_code, llvm_tools_path=None):
     目标架构由 IR 内嵌的 target triple 决定 (与 get_instrcount 一致); .text
     段大小由 llvm-size 从 .o 中解析, 不含符号表/重定位等 ELF 结构开销; llc 或
     llvm-size 不存在、编译/解析失败时返回 None, 由调用方决定回退策略.
+
+    重定位模型默认 pic: clang 在 x86_64/riscv64 Linux 上默认生成 PIC 代码,
+    C 输入基线 (clang -O<level> -c) 也是 PIC, 两者口径一致; 此前用 llc 默认
+    static 会少算 PLT/GOT 间接寻址开销, 使评分相对实际编译略微乐观.
     '''
     if not isinstance(ir_code, str):
         raise RuntimeError('输入不是字符串, 无法编译为 .o')
@@ -90,7 +103,8 @@ def get_object_size(ir_code, llvm_tools_path=None):
     tmpdir = tempfile.mkdtemp(prefix='ruyituner_')
     obj_path = os.path.join(tmpdir, 'output.o')
     try:
-        r = subprocess.run([llc_path, '-filetype=obj', '-o', obj_path, '-'],
+        r = subprocess.run([llc_path, '-relocation-model=pic', '-filetype=obj',
+                            '-o', obj_path, '-'],
                            input=ir_code, capture_output=True, text=True)
         if r.returncode != 0:
             _report_opt_failure('llc:filetype=obj', r.stderr)
