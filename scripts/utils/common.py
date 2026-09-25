@@ -81,6 +81,10 @@ def get_object_size(ir_code, llvm_tools_path=None):
     目标架构由 IR 内嵌的 target triple 决定 (与 get_instrcount 一致); .text
     段大小由 llvm-size 从 .o 中解析, 不含符号表/重定位等 ELF 结构开销; llc 或
     llvm-size 不存在、编译/解析失败时返回 None, 由调用方决定回退策略.
+
+    重定位模型默认 pic: clang 在 x86_64/riscv64 Linux 上默认生成 PIC 代码,
+    C 输入基线 (clang -O<level> -c) 也是 PIC, 两者口径一致; 用 llc 默认
+    static 会少算 PLT/GOT 间接寻址开销, 使评分相对实际编译略乐观.
     '''
     if not isinstance(ir_code, str):
         raise RuntimeError('输入不是字符串, 无法编译为 .o')
@@ -90,7 +94,8 @@ def get_object_size(ir_code, llvm_tools_path=None):
     tmpdir = tempfile.mkdtemp(prefix='ruyituner_')
     obj_path = os.path.join(tmpdir, 'output.o')
     try:
-        r = subprocess.run([llc_path, '-filetype=obj', '-o', obj_path, '-'],
+        r = subprocess.run([llc_path, '-relocation-model=pic', '-filetype=obj',
+                            '-o', obj_path, '-'],
                            input=ir_code, capture_output=True, text=True)
         if r.returncode != 0:
             _report_opt_failure('llc:filetype=obj', r.stderr)
