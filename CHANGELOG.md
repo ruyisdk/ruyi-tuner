@@ -122,4 +122,5 @@
 - C 输入的 C→IR 编译不再固定 -O0：改用 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）生成 .ll，训练与优化都在该优化等级的 IR 上进行；仅 `--opt-level O0` 时附加 `-Xclang -disable-O0-optnone`（其余优化等级前端不会产生 optnone 属性）；ruyituner.py 提示行/帮助文本与 Readme 的 `--input_type` 参数说明、输入支持小节、注意事项同步更新。
 - 基线为 0 时的跳过提示改为"<优化等级> 基线为 0, 跳过该文件"（原"优化后为 0"是旧 IR 基线的表述；新口径下基线为 0 通常来自纯数据源文件，如 bzip2 的 randtable.c 编译出的 .o 无 .text 代码），单文件与项目模式的提示同步更新。
 - scripts/ruyi-cc.sh 前端 IR 生成优化等级改为可配置（新增 RUYITUNER_FRONT_OPT 环境变量，默认 Oz），与 C 输入的训练/评分口径一致（此前固定 -O0 -emit-llvm）；仅当前端等级为 O0 时附加 -Xclang -disable-O0-optnone，脚本头部注释与用法说明同步更新。
+- `--search_scope project` 时把最优 pass 序列写入 output/Step3_<项目名>_PassList.csv（每行一个 pass、保持序列顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件）：run.py 新增 --project_name/--output_dir 参数（默认分别取数据集目录名与项目根目录下 output/），ruyituner.py 透传原始数据集目录名；Readme 输出说明同步更新。
 

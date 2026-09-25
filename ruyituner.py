@@ -348,7 +348,9 @@ def main():
                        '--opt-level', args.opt_level,
                        '--count_mode', args.count_mode,
                        '--search_scope', args.search_scope,
-                       '--max-path-length', str(args.max_path_length)]
+                       '--max-path-length', str(args.max_path_length),
+                       '--output_dir', out_dir,
+                       '--project_name', os.path.basename(os.path.normpath(args.dataset)) or 'dataset']
             if args.input_type == 'c':
                 # C 输入: 把基线清单传给 run.py, obj-size 计数方式下基线改用
                 # clang -O<level> -c 直接编译源码生成 .o 统计

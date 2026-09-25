@@ -220,6 +220,7 @@ python3 run.py \
 - 输出公共 Pass 序列（`Path`）
 - 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
 - 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
+- 把找到的最优 pass 序列逐行写入 `output/Step3_<项目名>_PassList.csv`（每行一个 pass、保持顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件）
 - 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**
