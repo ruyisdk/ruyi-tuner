@@ -112,3 +112,4 @@
 - utils/GA.py 的单文件 GA 函数 LeverageSyner_GA_codesize 更名为 LeverageSyner_GA_codesize_file，与项目模式的 LeverageSyner_GA_codesize_project 对应；run.py 的调用同步更新。
 - RunCSiBE.md 补充 --search_scope 说明：文中命令默认 file 模式（平均优化率为全部文件加权汇总的整体缩减率），并给出追加 --search_scope project 的示例命令。
 - 新增 --max-path-length 参数（ruyituner.py/run.py，默认 2）：控制 GA 初始种群中 pass 序列的最大长度；此前 utils/GA.py 中写死 MAX_PATH_LENGTH=2，现作为参数穿透到两个 GA 入口函数；该值仅约束初始种群，交叉/变异产生的后代不重新施加该上限；Readme 参数说明同步更新。
+- 新增 scripts/ruyi-cc.sh 编译器包装脚本：把 RuyTuner 找到的最优 pass 序列应用到项目的正常编译流程（真实clang -O0 -emit-llvm → opt -passes=<序列> → llc -filetype=obj），作为 CC 使用即可（make CC=scripts/ruyi-cc.sh）；序列按评分口径自动做 fix_loop_nesting 嵌套处理，-O 优化等级被忽略、管线完全由序列决定；链接/预处理/依赖生成等场景直通真实 clang，opt 失败回退无序列编译；-fPIC/-mcmodel 等代码生成选项同步转发给 llc，并默认使用 pic 重定位模型（llc 默认 static，与 clang 在 x86_64 上默认 pic 不一致，可用 RUYITUNER_RELOC_MODEL 覆盖）；相关环境变量：RUYITUNER_LLVM_BIN、RUYITUNER_PASS_SEQ、RUYITUNER_C_STD、RUYITUNER_C_FLAGS、RUYITUNER_REAL_CC；已在 bzip2-1.0.2 上验证全量编译、链接与压缩/解压功能正常。
