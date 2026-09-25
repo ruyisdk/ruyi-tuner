@@ -123,4 +123,5 @@
 - 基线为 0 时的跳过提示改为"<优化等级> 基线为 0, 跳过该文件"（原"优化后为 0"是旧 IR 基线的表述；新口径下基线为 0 通常来自纯数据源文件，如 bzip2 的 randtable.c 编译出的 .o 无 .text 代码），单文件与项目模式的提示同步更新。
 - scripts/ruyi-cc.sh 前端 IR 生成优化等级改为可配置（新增 RUYITUNER_FRONT_OPT 环境变量，默认 Oz），与 C 输入的训练/评分口径一致（此前固定 -O0 -emit-llvm）；仅当前端等级为 O0 时附加 -Xclang -disable-O0-optnone，脚本头部注释与用法说明同步更新。
 - `--search_scope project` 时把最优 pass 序列写入 output/Step3_<项目名>_PassList.csv（每行一个 pass、保持序列顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件）：run.py 新增 --project_name/--output_dir 参数（默认分别取数据集目录名与项目根目录下 output/），ruyituner.py 透传原始数据集目录名；Readme 输出说明同步更新。
+- ruyituner.py 集成 ruyi-cc.sh 的实际编译流程：`--input_type c` 且 `--search_scope project` 时，GA 优化之后新增实际编译对比阶段——序列直接读 output/Step3_<项目名>_PassList.csv，基线复用前一步写出的 Step3_<项目名>_Result.json（run.py 项目模式新增写出，不重新计算），其余参数（工具链/--c_std/--c_flags/--opt-level/并行数）直接取自 ruyituner.py，源文件列表取 C→IR 阶段的基线清单；编译管线与评分口径一致（clang -<level> 前端 → opt 序列 → llc pic，失败回退 clang 直通编译），.o 输出到 output/<项目名>/ 目录，最终输出实际编译后总大小与实际代码体积缩减率；utils/common.py 新增 get_object_file_text_size（解析已有 .o 的 .text 大小）；阶段标题相应变为 1/3、2/3、3/3；Readme 同步更新。
 

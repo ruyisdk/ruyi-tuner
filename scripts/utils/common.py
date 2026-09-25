@@ -138,6 +138,18 @@ def get_c_object_size(src_path, llvm_tools_path=None, opt_level='Oz',
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def get_object_file_text_size(obj_path, llvm_tools_path=None):
+    '''用 llvm-size 解析已有 .o 文件的 .text 段大小(字节); 失败返回 None.
+
+    供 ruyituner.py 的实际编译对比阶段复用 obj-size 口径的 .text 解析逻辑.'''
+    bin_dir = llvm_tools_path or ''
+    llvm_size_path = os.path.join(bin_dir, 'llvm-size') if bin_dir else 'llvm-size'
+    try:
+        return _parse_obj_text_size(obj_path, llvm_size_path)
+    except FileNotFoundError:
+        return None
+
+
 # 支持的计数方式开关: auto(自动选择), opt-stats, text, obj-size
 _COUNT_MODES = ('auto', 'opt-stats', 'text', 'obj-size')
 

@@ -57,7 +57,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 ### 1. 一键完成训练与优化（ruyituner.py）
 
-ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
+ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段；`--input_type c` 且 `--search_scope project` 时，GA 优化之后还会用找到的最优序列实际编译源码（管线与 ruyi-cc.sh 一致），与前面计算出的基线对比并输出实际代码体积缩减率。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
 
 **使用演示：**
 
@@ -220,7 +220,8 @@ python3 run.py \
 - 输出公共 Pass 序列（`Path`）
 - 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
 - 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
-- 把找到的最优 pass 序列逐行写入 `output/Step3_<项目名>_PassList.csv`（每行一个 pass、保持顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件）
+- 把找到的最优 pass 序列逐行写入 `output/Step3_<项目名>_PassList.csv`（每行一个 pass、保持顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件），并把基线/优化后大小/缩减率写入 `output/Step3_<项目名>_Result.json`（供实际编译对比复用，不重新计算）
+- 经 `ruyituner.py` 入口且为 C 输入项目模式时，接着用该序列实际编译源码（序列读 PassList CSV、基线读 Result.json、参数取自 ruyituner.py，.o 输出到 `output/<项目名>/`，管线与 ruyi-cc.sh 一致，失败回退 clang 直通编译），最终输出实际编译后总大小与实际代码体积缩减率
 - 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**

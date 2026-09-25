@@ -120,14 +120,30 @@ if args.search_scope == 'project':
         opt_level=args.opt_level, count_mode=args.count_mode,
         max_path_length=args.max_path_length,
         baseline_srcs=[_baseline_src_of(f) for f in filenames])
-    print("Path: ", path if score != 0 else [])
+    final_path = path if score != 0 else []
+    out_dir_run = args.output_dir or os.path.join(project_root, 'output')
+    project_name = args.project_name or _default_project_name()
+    print("Path: ", final_path)
     print("Total Baseline Size: ", total_baseline)
     print("Total Optimized Size: ", total_after)
     print("Overall Reduction Rate: ", f"{score * 100:.2f}%")
     # 把最优 pass 序列写入 Step3_<项目名>_PassList.csv, 供 ruyi-cc.sh 等直接使用
-    write_project_passlist(path if score != 0 else [],
-                           args.project_name or _default_project_name(),
-                           args.output_dir or os.path.join(project_root, 'output'))
+    write_project_passlist(final_path, project_name, out_dir_run)
+    # 基线/优化后大小/缩减率写入 Step3_<项目名>_Result.json, 供实际编译对比复用 (不重新计算)
+    if final_path:
+        result_path = os.path.join(out_dir_run, f'Step3_{project_name}_Result.json')
+        with open(result_path, 'w', encoding='utf-8') as fh:
+            json.dump({
+                'project_name': project_name,
+                'path': final_path,
+                'total_baseline': int(total_baseline),
+                'total_optimized': int(total_after),
+                'overall_reduction_rate': score,
+                'opt_level': args.opt_level,
+                'count_mode': args.count_mode,
+                'file_count': len(file_codes),
+            }, fh, ensure_ascii=False, indent=2)
+        print(f'结果已写入: {result_path}')
     print(f"Done: one common pass sequence for {len(file_codes)} files.")
     sys.exit(0)
 
