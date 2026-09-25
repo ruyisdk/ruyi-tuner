@@ -1,6 +1,7 @@
 import os
 import io,sys
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -60,6 +61,20 @@ def _count_text(ir_code):
             count += 1
     return count
 
+def _parse_obj_text_size(obj_path, llvm_size_path):
+    '''用 llvm-size 解析 .o 的 .text 段大小(字节); 空文件返回 0, 失败返回 None.'''
+    if not os.path.isfile(obj_path) or os.path.getsize(obj_path) == 0:
+        return 0
+    r = subprocess.run([llvm_size_path, obj_path],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        _report_opt_failure('llvm-size', r.stderr)
+        return None
+    # llvm-size (Berkeley 格式) 数据行: text data bss dec hex filename
+    m = re.search(r'^\s*(\d+)\s+\d+\s+\d+', r.stdout, re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
 def get_object_size(ir_code, llvm_tools_path=None):
     '''用 llc 将 LLVM IR 编译为 .o 目标文件, 并返回 .o 中 .text 段的大小(字节).
 
@@ -80,16 +95,43 @@ def get_object_size(ir_code, llvm_tools_path=None):
         if r.returncode != 0:
             _report_opt_failure('llc:filetype=obj', r.stderr)
             return None
-        if not os.path.isfile(obj_path) or os.path.getsize(obj_path) == 0:
-            return 0
-        r2 = subprocess.run([llvm_size_path, obj_path],
-                            capture_output=True, text=True)
-        if r2.returncode != 0:
-            _report_opt_failure('llvm-size', r2.stderr)
+        return _parse_obj_text_size(obj_path, llvm_size_path)
+    except FileNotFoundError:
+        return None
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def get_c_object_size(src_path, llvm_tools_path=None, opt_level='Oz',
+                      c_std=None, c_flags=None, cwd=None):
+    '''直接用 clang 以指定优化等级把 C 源码(.c/.i)编译为 .o, 返回 .text 段大小(字节).
+
+    --input_type c 时的基线口径: 与真实编译一致, clang -O<level> -c 一步生成
+    .o, 跳过 "C→IR(前端) → opt → llc" 的中间过程, 更贴近实际情况; clang 优先
+    取 llvm_tools_path 下的, 否则回退系统 PATH; 编译失败或工具缺失返回 None,
+    由调用方回退 IR 口径的基线.
+    '''
+    bin_dir = llvm_tools_path or ''
+    clang_path = os.path.join(bin_dir, 'clang') if bin_dir else None
+    if clang_path is None or not os.path.isfile(clang_path):
+        clang_path = shutil.which('clang')
+        if clang_path is None:
             return None
-        # llvm-size (Berkeley 格式) 数据行: text data bss dec hex filename
-        m = re.search(r'^\s*(\d+)\s+\d+\s+\d+', r2.stdout, re.MULTILINE)
-        return int(m.group(1)) if m else None
+    llvm_size_path = os.path.join(bin_dir, 'llvm-size') if bin_dir else 'llvm-size'
+    tmpdir = tempfile.mkdtemp(prefix='ruyituner_cobj_')
+    obj_path = os.path.join(tmpdir, 'baseline.o')
+    try:
+        cmd = [clang_path, f'-{opt_level}', '-c']
+        if c_flags:
+            cmd += shlex.split(c_flags)
+        if c_std is not None:
+            cmd.append(f'-std={c_std}')
+        cmd += [src_path, '-o', obj_path]
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+        if r.returncode != 0:
+            _report_opt_failure(f'clang -{opt_level} -c', r.stderr)
+            return None
+        return _parse_obj_text_size(obj_path, llvm_size_path)
     except FileNotFoundError:
         return None
     finally:

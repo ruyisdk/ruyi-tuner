@@ -14,7 +14,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
 
-**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由 .ll 文件内嵌的 target triple 决定，天然支持 x86、RISC-V 及混合架构数据集（datasets/x86 与 datasets/riscv 均由 clang 从 C++ 源码生成）。
+**版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由输入的LLVM目标架构决定，天然支持 x86、RISC-V 等架构。
 
 ## 环境要求
 
@@ -22,17 +22,17 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 - LLVM 工具链
   - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
   - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
-  - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：仅需 opt，无需其他工具；输入文件为 C 源码（`--input_type c`）：还需同一工具链中的 clang（`ninja clang`），用于先将 .c 文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
+  - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：仅需 opt，无需其他工具；输入文件为 C 源码（`--input_type c`，支持 .c 与预处理后的 .i）：还需同一工具链中的 clang（`ninja clang`），用于先将源文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
 - 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
 
 ## 项目结构
 
 ```
 ├── datasets/            # 测试数据集 (.ll IR 与 C 源码)
-│   ├── x86/             # x86架构数据集
-│   │   ├── 1_x_ll/      #   LLVM IR: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
-│   │   └── c_files/     #   C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
-│   └── riscv/           # RISC-V架构数据集: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
+│   ├── ll_files/        # LLVM IR 数据集
+│   │   ├── x86/         #   x86架构: clang从C++源码生成(含main+scanf/printf), 内嵌x86_64 target triple
+│   │   └── riscv/       #   RISC-V架构: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
+│   └── c_files/         # C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
 ├── output/              # 训练输出结果
 │   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对(已过滤空结果)
 │   ├── Step2_EnumeratedPairs.csv      # 枚举的所有协同对
@@ -64,47 +64,57 @@ ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完�
 ```bash
 # 完整流程：训练 → 用训练得到的协同Pass对做GA优化
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin
 
 # 仅训练，不优化
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
 # 仅优化（复用已有的Step2_EnumeratedPairs.csv）
 python3 ruyituner.py \
-    --dataset ./datasets/x86 \
+    --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
     --paircsv ./output/Step2_EnumeratedPairs.csv
 
-# 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数
+# 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数。
 python3 ruyituner.py \
-    --dataset ./datasets/x86/c_files/csibe-v2.1.1/flex-2.5.31 \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 \
     --input_type c \
     --llvm_tools_path /llvm_dir/build/bin \
     --count_mode obj-size \
     --c_std gnu89 \
     --c_flags '-DHAVE_CONFIG_H'
+
+# 预处理后的C源码(.i)数据集（如lwip-0.5.3.preproc）同样支持；旧式代码需--c_std gnu89避免隐式声明报错
+python3 ruyituner.py \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc \
+    --input_type c \
+    --llvm_tools_path /llvm_dir/build/bin \
+    --count_mode obj-size \
+    --c_std gnu89
 ```
 
 **参数说明：**
 - `--dataset`: 数据集目录（必选，训练与优化共用）
-- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先`--llvm_tools_path`下的clang，回退系统PATH）以`-O0 -S -emit-llvm -Xclang -disable-O0-optnone`把数据集目录下所有.c文件编译为.ll（保持相对目录结构、并行编译），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的.c文件告警跳过，全部失败则报错退出
+- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先`--llvm_tools_path`下的clang，回退系统PATH）以`--opt-level`指定的优化等级（默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
 - `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
-- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时不传；依赖autoconf生成头文件的基准（如flex）需要它；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
+- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时不传；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
-- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）；`--input_type c` 搭配 `obj-size` 时，评分基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计（`clang -O<level> -c`，不再经过 C→IR→opt 中间过程），其余组合基线仍按 IR 统计
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file（为每个文件各找一个，走现有流程）；project=为整个项目找一条公共序列（聚合适应度GA，按文件大小加权的整体缩减率评分）
+- `--max-path-length`: (可选) GA初始种群中pass序列的最大长度（pass个数），默认2；仅约束初始种群的序列长度，交叉与变异产生的后代不受该上限约束
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
 - `--only_train`/`--only_run`: (可选) 仅执行训练/仅执行优化，两者不能同时使用
 
@@ -127,14 +137,14 @@ cd scripts
 
 # 手动指定pass列表进行训练（--output_dir也可省略，默认使用项目根目录下的output/）
 python3 train.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
     --passfile ../passes_examples/passes_2210-gen.txt
 
 # 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略,默认使用项目根目录下的output/；pass列表默认不写文件，除非指定--passlist_output）
 python3 train.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --output_dir ../output
 
@@ -168,9 +178,11 @@ python3 train.py \
 
 **遗传算法简介：** GA 模拟自然选择过程——把一条 Pass 序列当作"个体"，其适应度是该序列对代码体积的缩减程度；算法维护一个种群，每代通过选择(保留高适应度个体)、交叉(交换两条序列的片段)、变异(随机扩展序列)产生新种群，迭代若干代后输出最优个体。RuyiTuner 的默认参数为：种群规模 100、迭代 10 代、变异率 0.5、每代保留前 10% 精英个体。
 
-**整体优化过程：** 以 Step2 中的协同对为有向边构建搜索图（节点是 Pass，边表示"先 A 后 B"的协同关系）；初始种群在图中随机游走生成长度不超过 2 的序列，之后通过多代交叉与变异不断进化。每个个体都会被真正执行一遍（`opt -passes=<序列>`）并按指令数打分。对数据集中的每个 .ll 文件独立运行一次 GA，输出该文件的最优 Pass 序列与得分。
+**整体优化过程：** 默认情况下，`--search_scope file`，以 Step2 中的协同对为有向边构建搜索图（节点是 Pass，边表示"先 A 后 B"的协同关系）；初始种群在图中随机游走生成长度不超过 2 的序列，之后通过多代交叉与变异不断进化。每个个体都会被真正执行一遍（`opt -passes=<序列>`）并按指令数打分。对数据集中的每个 .ll 文件独立运行一次 GA，输出该文件的最优 Pass 序列与得分。
 
-**评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数（`--count_mode obj-size` 下为 .o 文件的 .text 段字节大小）；每个文件的 Code Size Reduction Rate = (基线 - GA序列优化后) / 基线。Code Size Reduction Rate 为正表示 GA 序列比基线更短（有效改进，例如 10% 表示再少 10%）；为 0 表示与基线持平；最优个体为负时不输出（负值与比基线更差的路径没有意义，按无收益记 0%）；为 100% 属于异常（模块被清空，通常是 internalize 类 pass 导致）。Mean Reduction Rate 是所有文件按大小加权汇总的整体平均缩减率：
+`--search_scope project` 时行为不同：为全部输入文件寻找一条公共的最优 Pass 序列——GA 适应度改为按文件大小加权的整体缩减率 `(Σ基线 − Σ优化后) / Σ基线`（与 Mean Reduction Rate 同口径），序列在个别文件上 opt 失败时回退原始 IR 计数（视为无收益，会被自然惩罚）；最终输出公共 Pass 序列、总基线大小、总优化后大小与整体缩减率，不再逐文件输出。
+
+**评分标准：** 先计算基线——用 `--opt-level` 指定的优化等级（默认 Oz）直接优化该文件得到的指令数（`--count_mode obj-size` 下为 .o 文件的 .text 段字节大小）。`--input_type c` 且 `--count_mode obj-size` 时，基线改为真实编译口径：直接用 clang 以该优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，clang 编译失败时回退 IR 口径基线；其余输入/计数组合基线口径不变。每个文件的 Code Size Reduction Rate = (基线 - GA序列优化后) / 基线。Code Size Reduction Rate 为正表示 GA 序列比基线更短（有效改进，例如 10% 表示再少 10%）；为 0 表示与基线持平；最优个体为负时不输出（负值与比基线更差的路径没有意义，按无收益记 0%）；为 100% 属于异常（模块被清空，通常是 internalize 类 pass 导致）。Mean Reduction Rate 是所有文件按大小加权汇总的整体平均缩减率：
 
 $$\text{Mean Reduction Rate} = \frac{\sum\text{所有文件基线} - \sum\text{所有文件优化后}}{\sum\text{所有文件基线}}$$
 
@@ -181,7 +193,7 @@ Code Size Reduction Rate 为 0 的文件同样计入分母、分子贡献为 0�
 ```bash
 cd scripts
 python3 run.py \
-    --dataset ../datasets/x86 \
+    --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
     --paircsv ../output/Step2_EnumeratedPairs.csv
 ```
@@ -192,21 +204,48 @@ python3 run.py \
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
+- `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file；project=为整个项目找一条公共序列，输出公共序列与整体缩减率，不再逐文件输出
 
-**输出：**
-- 输出用于优化的Pass序列
-- 打印该序列下的 Code Size Reduction Rate
-- 输出所有文件加权汇总的 Mean Reduction Rate
+**输出：** 两种 `--search_scope` 模式的输出不同：
+
+`--search_scope file`（默认，为每个文件各找一条最优 Pass 序列，逐文件输出）：
+- 每个文件的评分结果带编号 `[i/N]`（`Current File [i/N]: xxx`）
+- 输出该文件的最优 Pass 序列（`Path`）
+- 输出该文件的基线大小（`<优化等级> Baseline Size`，按 `--opt-level`，默认 Oz）与 RuyiTuner 优化后大小（`RuyiTuner Optimized Size`），便于与缩减率相互对照
+- 打印该序列下的 `Code Size Reduction Rate` 与所有文件加权汇总的 `Mean Reduction Rate`
+- 最后打印评分文件总数（`Done: N files scored in total.`）
+
+`--search_scope project`（为全部文件找一条公共的最优 Pass 序列，整体输出一次）：
+- 开头打印本次使用的计数方式（`计数方式: xxx`，由 `--count_mode` 决定）
+- 输出公共 Pass 序列（`Path`）
+- 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
+- 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
+- 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**
+- `--search_scope file` 模式：
 
 ```text
-Current File: datasets/x86/1_24.ll
+Current File [1/12]: datasets/ll_files/x86/1_24.ll
 Path:  ['module(declare-runtime-libcalls)', 'module(scc-oz-module-inliner)', 'cgscc(attributor-cgscc)', 'function(memcpyopt)', 'module(iroutliner)', 'function(dce)', 'function(gvn)', 'function(gvn-hoist)']
+Oz Baseline Size: 3124
+RuyiTuner Optimized Size: 3076
 Code Size Reduction Rate:  1.54%
 Mean Reduction Rate:  6.03%
+Done: 12 files scored in total.
 ```
 
+- `--search_scope project` 模式：
+```text
+计数方式: obj-size
+Path:  ['loop(loop-rotate)', 'function(mem2reg)', 'function(gvn-hoist)', 'function(structurizecfg)', 'function(tailcallelim)', 'module(attributor)', 'function(sroa)', 'module(ipsccp)', 'function(gvn-hoist)', 'module(scc-oz-module-inliner)', 'function(dse)', 'function(lower-switch)', 'module(globalopt)', 'function(gvn)', 'function(simplifycfg)', 'function(instcombine)', 'function(gvn-hoist)']
+Total Baseline Size:  32518
+Total Optimized Size:  22157
+Overall Reduction Rate:  31.86%
+Done: one common pass sequence for 6 files.
+[ruyituner] 全部完成.
+[ruyituner] 已清理 IR 缓存目录: /tmp/ruyituner_ir_yy9el4vp
+```
 
 ### 4. 指令计数方式（--count_mode）
 
@@ -215,16 +254,25 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
 - `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
 - `text`：强制按 IR 文本缩进规律统计指令行数；
-- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）。
+- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
 
 四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
 
+### 5. 输入支持：LLVM IR 与 C 源码
+
+RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
+
+- **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
+- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark）。工具链需包含 clang，先用 clang 以 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源与 C→IR 生成统一采用 `--opt-level` 优化等级。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
+
+CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。
+
 ## 注意事项
 
-- 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序生成的 .ll 文件；
-- `ruyituner.py` 的 `--input_type c` 要求数据集的 .c 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
-- 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（生成时加 `-Xclang -disable-O0-optnone`）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
-- 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
+- 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序构建的数据集；
+- `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
+- 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（以 `--opt-level O0` 生成时加 `-Xclang -disable-O0-optnone`，其余优化等级前端不会产生该属性）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
+- 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 
 ## 参考文献
 

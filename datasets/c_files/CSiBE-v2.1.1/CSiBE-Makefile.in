@@ -1,0 +1,87 @@
+#
+#    Makefile.body: GNU Make makefile for creating size measurement results
+#      in a specific directory of a CSiBE configuration.
+#    Copyright (C) 2004  Tamas Gergely
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+SIZE  := @CSiBE-SIZE@
+
+#
+# Rules
+#
+
+all : result.csv result-size.csv result-time.csv
+
+.PHONY : clean
+
+size.txt : Makefile
+	$(MAKE) objs
+	$(SIZE) `find . -name '*.o' -print` >$@
+
+time.txt : Makefile
+	$(MAKE) objs
+	( for X in `find . -name '*.o.time' -print` ; do \
+		echo -n $$X | sed 's/^\.\///' | sed 's/\.o\.time/,/' ; \
+		cat $$X | sort | awk 'BEGIN {OFS=""; ORS=""} {print $$1 ","}' | sed 's/,$$//' ; \
+		echo ; \
+	done ) >$@
+
+comp.txt : Makefile
+	$(MAKE) comp
+	( for X in `find . -name '*.comp' -print` ; do \
+		echo -n $$X | sed 's/^\.\///' | sed 's/\.comp/,/' ; \
+		cat $$X | grep '.zipped' | awk '{print $$5}' ; \
+	done ) >$@
+
+runtime.txt : Makefile
+	$(MAKE) run
+	( for X in `find . -name '*.run.time' -print` ; do \
+		echo -n $$X | sed 's/^\.\///' | sed 's/\.run\.time/,/' ; \
+		cat $$X | sort | awk 'BEGIN {OFS=""; ORS=""} {print $$1 ","}' | sed 's/,$$//' ; \
+		echo ; \
+	done ) >$@
+
+result-size.csv : size.txt
+	awk 'BEGIN {OFS=","} /\.o$$/ {print $$6,$$1+$$2}' $< | sed 's/^\.\///' | sed 's/\.o,/,/' > $@
+
+result-time.csv : time.txt
+	cat $< > $@
+
+result-comp.csv : comp.txt
+	cat $< > $@
+
+result-runtime.csv : runtime.txt
+	cat $< > $@
+
+result.csv : result-size.csv result-time.csv
+	sed 's/,/,Asize:/' result-size.csv > tmp-size
+	sed 's/,/,Btime:/' result-time.csv > tmp-time
+	cat tmp-size tmp-time | sort | \
+		awk 'BEGIN {x=0; FS=":"; OFS=""; ORS=""} /Asize:/ {print $$1 "," $$2 ","} /Btime:/ {print $$2 "\n"}' | \
+		sed 's/,Asize,/,/' | sed 's/,Btime,/,/g' > $@ 
+	rm -f tmp*
+
+clean-comp :
+	rm -f comp.txt result-comp.csv
+
+clean :
+	rm -f size.txt time.txt comp.txt runtime.txt result.csv result-time.csv result-size.csv result-runtime.csv
+	for X in `find . -name '*.time' -print` ; do \
+		rm -f $$X ; \
+	done
+	for X in `find . -name '*.comp' -print` ; do \
+		rm -f $$X ; \
+	done

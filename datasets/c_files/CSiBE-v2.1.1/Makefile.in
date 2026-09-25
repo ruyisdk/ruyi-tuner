@@ -1,0 +1,136 @@
+#
+#    Makefile.in: GNU Make makefile for creating size, time and runtime
+#      measurement results in a CSiBE configuration.
+#    Copyright (C) 2004  Tamas Gergely
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+# The source dir is assumed to be "../src" from this dir. Directory names in
+# ../src may contain only '_','-','A'-'Z','a'-'z','0'-'9' characters.
+#
+
+VPATH := @CSiBE-SRCDIR@
+
+#
+# Set the variable `CC' to point to the compiler that will be used
+# to produce the binaries to be measured.
+# `CCOPT' can be used to provide compiler optimization flags.
+#
+CC     = @CSiBE-CC@
+CCOPT := @CSiBE-CCOPT@
+
+#
+# Set the variable `ZIP' to point to the compressor program or `cat'.
+#
+ZIP   := @CSiBE-ZIP@
+
+#
+# The variables `USER', `BRANCH', `TARGET', `LIB', `CVSDATE' and `CVSTAG'
+# are copied into the resulting csv file. They are reserved for advanced use
+# and do not influence the measurement in any way.
+# You don't need to modify these for regular use.
+#
+USER   := @CSiBE-INFO-USER@
+BRANCH := @CSiBE-INFO-BRANCH@
+TARGET := @CSiBE-INFO-TARGET@
+LIB    := @CSiBE-INFO-LIB@
+CVSDATE:= @CSiBE-INFO-CVSDATE@
+CVSTAG := @CSiBE-INFO-CVSTAG@
+
+RUNSIM := @CSiBE-RUNSIM@
+
+PASSFLAGS:="CC=$(CC)" "SIZE=$(SIZE)" "TIME=$(TIME)" "CCOPT=$(CCOPT)"
+
+RM     := rm -f
+#
+# Modify `PDIRS' if you wish to work with only a subset of the test sources.
+#
+PDIRS    := $(shell for X in `ls -d *` ; do if [ "$$X" != "include" -a "$$X" != "testdata" -a -d $$X ] ; then echo $$X ; fi ; done)
+
+PMAKES   := $(addsuffix /Makefile,$(PDIRS))
+PRESULTS := $(addsuffix /result.csv,$(PDIRS))
+PSIZERES := $(addsuffix /result-size.csv,$(PDIRS))
+PTIMERES := $(addsuffix /result-time.csv,$(PDIRS))
+PCOMPRES := $(addsuffix /result-comp.csv,$(PDIRS))
+PRUNTRES := $(addsuffix /result-runtime.csv,$(PDIRS))
+
+ALLRESULTS:=$(addsuffix .csv,$(addprefix result-,@CSiBE-ALLRESULTS@))
+#
+# Rules
+#
+
+all : $(ALLRESULTS)
+
+.PHONY : result clean cleanall
+
+result : $(ALLRESULTS)
+	rm -Rf $(PDIRS) resultheader
+
+result-size.csv : resultheader $(PSIZERES)
+	echo "size" > $@
+	cat $< >> $@
+	for X in $(PSIZERES) ; do awk "BEGIN {OFS=\",\"} {print \"`echo \"$$X\" | sed \"s/\/.*//\"`\",\$$0}" $$X >> $@ ; done
+
+result-time.csv : resultheader $(PTIMERES)
+	echo "time" > $@
+	cat $< >> $@
+	for X in $(PTIMERES) ; do awk "BEGIN {OFS=\",\"} {print \"`echo \"$$X\" | sed \"s/\/.*//\"`\",\$$0}" $$X >> $@ ; done
+
+result-comp.csv : resultheader $(PCOMPRES)
+	echo "comp" > $@
+	cat $< >> $@
+	if [ "cat" == "$(ZIP)" ] ; then echo "\"none\",0" ; else echo "\"$(ZIP)\",0" ; fi >> $@
+	for X in $(PCOMPRES) ; do awk "BEGIN {OFS=\",\"} {print \"`echo \"$$X\" | sed \"s/\/.*//\"`\",\$$0}" $$X >> $@ ; done
+
+result-runtime.csv : resultheader $(PRUNTRES)
+	echo "runtime" > $@
+	cat $< >> $@
+	for X in $(PRUNTRES) ; do awk "BEGIN {OFS=\",\"} {print \"`echo \"$$X\" | sed \"s/\/.*//\"`\",\$$0}" $$X >> $@ ; done
+
+result.csv : resultheader $(PRESULTS)
+	cat $< > $@
+	for X in $(PRESULTS) ; do awk "BEGIN {OFS=\",\"} {print \"`echo \"$$X\" | sed \"s/\/.*//\"`\",\$$0}" $$X >> $@ ; done
+
+resultheader :
+	echo "\"@CSiBE-VERSION@\",$(USER),\"$(BRANCH)\",\"$(TARGET)\",\"$(CVSDATE)\",\"$(CVSTAG)\",\"`$(CC) --version | grep -e '[0-9]\.[\.0-9]*' | sed -e 's/.*\ \([0-9]\.[\.0-9]*\)\ .*/\1/'`\"" > $@
+	echo "\"$(LIB)\",\"$(CCOPT)\"" >> $@
+
+$(PSIZERES) : %/result-size.csv : %/Makefile
+	$(MAKE) -f `pwd`/CSiBE-Makefile -C $(dir $@) result-size.csv
+
+$(PTIMERES) : %/result-time.csv : %/Makefile
+	$(MAKE) -f `pwd`/CSiBE-Makefile -C $(dir $@) result-time.csv
+
+$(PCOMPRES) : %/result-comp.csv : %/Makefile
+	$(MAKE) -f `pwd`/CSiBE-Makefile -C $(dir $@) result-comp.csv
+
+$(PRUNTRES) : %/result-runtime.csv : %/Makefile
+	$(MAKE) -f `pwd`/CSiBE-Makefile -C $(dir $@) result-runtime.csv
+
+$(PRESULTS) : %/result.csv : %/Makefile
+	$(MAKE) -f `pwd`/CSiBE-Makefile -C $(dir $@) result.csv
+
+clean-comp:
+	for X in $(PDIRS) ; do if [ -d $$X ] ; then \
+		$(MAKE) -C $$X clean-comp ; \
+		$(MAKE) -f `pwd`/CSiBE-Makefile -C $$X clean-comp ; \
+	fi ; done
+
+clean : 
+	for X in $(PDIRS) ; do if [ -d $$X ] ; then \
+		$(MAKE) -C $$X clean ; \
+		$(MAKE) -f `pwd`/CSiBE-Makefile -C $$X clean ; \
+	fi ; done
+	rm -f result-size.csv result-time.csv result-runtime.csv result-comp.csv resultheader

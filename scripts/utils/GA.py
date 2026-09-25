@@ -1,14 +1,154 @@
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from utils.common import get_instrcount
+from utils.common import get_c_object_size, get_instrcount
 
-def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto'):
-        import random
-        # 基线: 按用户指定的优化等级(opt_level, 默认Oz)优化后的指令数/代码大小
-        baseline_count = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+
+def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
+                      baseline_src=None, label=''):
+    '''计算单个文件的基线大小.
+
+    baseline_src 非 None 且计数方式为 obj-size 时 (即 C 输入场景), 基线改为
+    直接用 clang -O<level> -c 把 C 源码编译为 .o 并统计 .text 大小, 与真实
+    编译口径一致; clang 编译失败时回退 IR 口径基线. 其余情况维持原口径:
+    用 opt -O<level> 优化 O0 级 IR 后计数/测大小.'''
+    if baseline_src and count_mode == 'obj-size':
+        size = get_c_object_size(
+            baseline_src['src'], llvm_tools_path, opt_level=opt_level,
+            c_std=baseline_src.get('c_std'),
+            c_flags=baseline_src.get('c_flags'),
+            cwd=baseline_src.get('src_root'))
+        if size is not None:
+            return size
+        name = f' ({label})' if label else ''
+        print(f'[baseline] clang -{opt_level} -c 直接编译失败, 回退 IR 口径基线{name}.')
+    return get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+
+
+def _ga_search(graph, nodes, fitness_function, population_size=100, generations=10,
+               mutation_rate=0.5, selection_rate=0.1, max_length=2):
+    """遗传算法搜索最优 pass 序列 (单文件与项目两种模式共用).
+
+    fitness_function(path) 返回 (得分, 路径); 本函数返回 (最优得分, 最优路径)."""
+    import random
+
+    # 初始种群生成
+    def generate_population(graph, nodes, size, max_length):
+        random.seed(1234)
+        population = []
+        for index in range(size):
+            path = []
+            available_nodes = sorted(set(nodes))
+            current = random.choice(list(available_nodes))
+            path.append(current)
+            available_nodes.remove(current)
+
+            while len(path) < max_length:
+                next_nodes = graph[current]
+                if len(next_nodes) != 0:
+                    next_node = random.choice(next_nodes)
+                    if next_node not in path:
+                        path.append(next_node)
+                        current = next_node
+                        if current not in available_nodes:
+                            break
+                        available_nodes.remove(current)
+                    else:
+                        break
+                else:
+                    break
+
+            population.append(path)
+        return population
+
+    # 计算适应度
+    def calculate_fitness(population):
+        fitness_scores = []
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(fitness_function, path) for path in population]
+            for future in futures:
+                score, best_sub_path = future.result()
+                fitness_scores.append((score, best_sub_path))
+        return sorted(fitness_scores, key=lambda x: x[0], reverse=True)
+
+    # 选择
+    def selection(fitness_scores, rate):
+        selected = fitness_scores[:int(len(fitness_scores) * rate)]
+        return [path for _, path in selected]
+
+    # 交叉
+    def crossover(parent1, parent2):
+        common_nodes = set(parent1) & set(parent2)
+        if not common_nodes:
+            return parent1, parent2
+
+        common_nodes = sorted(common_nodes)
+        crossover_node = random.choice(list(common_nodes))
+        idx1 = parent1.index(crossover_node)
+        idx2 = parent2.index(crossover_node)
+
+        child1 = parent1[:idx1] + parent2[idx2:]
+        child2 = parent2[:idx2] + parent1[idx1:]
+
+        return child1, child2
+
+    def find_parents_with_common_nodes(selected):
+        attempts = 0
+        while attempts < 10:
+            parent1, parent2 = random.sample(selected, 2)
+            if set(parent1) & set(parent2):
+                return parent1, parent2
+            attempts += 1
+        return selected[0], selected[1]
+
+    # 变异
+    def mutate(path, mutation_rate):
+        if random.random() < mutation_rate:
+            mutation_points = [i for i, node in enumerate(path) if len(graph[node]) > 1]
+            if mutation_points:
+                mutation_point = random.choice(mutation_points)
+                current = path[mutation_point]
+                next_node = random.choice(graph[current])
+                mutated_path = path[:mutation_point + 1]
+                mutated_path.append(next_node)
+                current = next_node
+
+                while current in graph and graph[current]:
+                    next_nodes = graph[current]
+                    next_node = random.choice(next_nodes)
+                    if next_node not in mutated_path:
+                        mutated_path.append(next_node)
+                        current = next_node
+                    else:
+                        break
+
+                path = mutated_path
+        return path
+
+    # 遗传算法主循环
+    population = generate_population(graph, nodes, population_size, max_length)
+    for i in range(generations):
+        fitness_scores = calculate_fitness(population)
+        selected = selection(fitness_scores, selection_rate)
+        next_population = []
+        while len(next_population) < population_size:
+            parent1, parent2 = find_parents_with_common_nodes(selected)
+            child1, child2 = crossover(parent1, parent2)
+            next_population.append(mutate(child1, mutation_rate))
+            next_population.append(mutate(child2, mutation_rate))
+        population = next_population
+    final_fitness_scores = calculate_fitness(population)
+    return final_fitness_scores[0][0], final_fitness_scores[0][1]
+
+
+def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_src=None):
+        # 基线: C 输入(obj-size 计数)时直接用 clang -O<level> -c 编译源码统计 .o,
+        # 否则按用户指定的优化等级(opt_level, 默认Oz)优化 O0 级 IR 后计数/测大小
+        baseline_count = _compute_baseline(ll_code, llvm_tools_path, opt_level,
+                                           count_mode, baseline_src)
         if(baseline_count == 0):
-            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印)
-            print(f"{opt_level} 优化后为 0, 跳过该文件.")
+            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印);
+            # obj-size 口径下通常为纯数据文件 (如 bzip2 的 randtable.c, .o 的 .text 为 0 字节)
+            print(f"{opt_level} 基线为 0, 跳过该文件.")
             return [], 0.0, 0, 0
         # 协同对列表为空时无法构建图, 直接返回空路径/零分, 避免 generate_population 崩溃
         if not edges:
@@ -23,141 +163,113 @@ def LeverageSyner_GA_codesize(edges, ll_code, llvm_tools_path, opt_level='Oz', c
             nodes.add(end)
 
         # 遗传算法参数
-
-        # random.seed(1234)
         POPULATION_SIZE = 100
         GENERATIONS = 10
         MUTATION_RATE = 0.5
         SELECTION_RATE = 0.1
-        MAX_PATH_LENGTH = 2  # 限制路径的最大长度
+        # 序列最大长度由 max_path_length 参数控制 (默认 2)
 
-        # 初始种群生成
-        def generate_population(graph, nodes, size, max_length):
-            random.seed(1234)
-            population = []
-            for index in range(size):
-                path = []
-                available_nodes = sorted(set(nodes))
-                current = random.choice(list(available_nodes))
-                path.append(current)
-                available_nodes.remove(current)
-                
-                while len(path) < max_length:
-                    next_nodes = graph[current]
-                    if len(next_nodes) != 0:
-                        next_node = random.choice(next_nodes)
-                        if next_node not in path:
-                            path.append(next_node)
-                            current = next_node
-                            if current not in available_nodes:
-                                break
-                            available_nodes.remove(current)
-                        else:
-                            break
-                    else:
-                        break
-                
-                population.append(path)
-            return population
-
-        # 计算适应度
+        # 单文件适应度: 相对指定优化等级基线的缩减比例
         def fitness_function(path):
             score = (baseline_count - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path, count_mode=count_mode)) / baseline_count
             return score, path
 
-        def calculate_fitness(population):
-            fitness_scores = []
-            with ThreadPoolExecutor() as executor:
-                futures = [executor.submit(fitness_function, path) for path in population]
-                for future in futures:
-                    max_score, best_sub_path = future.result()  # 获取最大分数和对应的子路径
-                    fitness_scores.append((max_score, best_sub_path))  # 存储最大分数和子路径
-            return sorted(fitness_scores, key=lambda x: x[0], reverse=True)
-
-        # 选择
-        def selection(fitness_scores, rate):
-            selected = fitness_scores[:int(len(fitness_scores) * rate)]
-            return [path for _, path in selected]
-
-        # 交叉
-        def crossover(parent1, parent2):
-            # random.seed(1234)
-            common_nodes = set(parent1) & set(parent2)
-            if not common_nodes:
-                return parent1, parent2
-
-            common_nodes = sorted(common_nodes)
-            crossover_node = random.choice(list(common_nodes))
-            idx1 = parent1.index(crossover_node)
-            idx2 = parent2.index(crossover_node)
-
-            child1 = parent1[:idx1] + parent2[idx2:]
-            child2 = parent2[:idx2] + parent1[idx1:]
-
-            return child1, child2
-
-        def find_parents_with_common_nodes(selected):
-            attempts = 0
-            while attempts < 10:
-                parent1, parent2 = random.sample(selected, 2)
-                if set(parent1) & set(parent2):
-                    return parent1, parent2
-                attempts += 1
-            return selected[0], selected[1]
-
-        # 变异
-        def mutate(path, mutation_rate):
-            # random.seed(1234)
-            if random.random() < mutation_rate:
-                mutation_points = [i for i, node in enumerate(path) if len(graph[node]) > 1]
-                if mutation_points:
-                    mutation_point = random.choice(mutation_points)
-                    current = path[mutation_point]
-                    next_node = random.choice(graph[current])
-                    mutated_path = path[:mutation_point + 1]
-                    mutated_path.append(next_node)
-                    current = next_node
-                    
-                    while current in graph and graph[current]:
-                        next_nodes = graph[current]
-                        next_node = random.choice(next_nodes)
-                        if next_node not in mutated_path:
-                            mutated_path.append(next_node)
-                            current = next_node
-                        else:
-                            break
-                    
-                    path = mutated_path
-            return path
-
-
-        # 遗传算法主函数
-        def genetic_algorithm(nodes, graph, population_size, generations, mutation_rate, selection_rate, max_length):
-            population = generate_population(graph, nodes, population_size, max_length)
-            # population = generate_random_init_population(label, csv_path)
-            fitness_scores = calculate_fitness(population)
-            for i in range(generations):
-                fitness_scores = calculate_fitness(population)
-                # print(f"best score in generation {i}: ", fitness_scores[0][0])
-                selected = selection(fitness_scores, selection_rate)
-                next_population = []
-                while len(next_population) < population_size:
-                    parent1, parent2 = find_parents_with_common_nodes(selected)
-                    child1, child2 = crossover(parent1, parent2)
-                    next_population.append(mutate(child1, mutation_rate))
-                    next_population.append(mutate(child2, mutation_rate))
-                population = next_population
-            final_fitness_scores = calculate_fitness(population)
-            # 仅在输出时加非负约束: 最优得分为负时, 负值与对应路径没有意义,
-            # 按无收益输出空路径与0分; 不改变适应度计算与选择过程
-            if final_fitness_scores[0][0] < 0:
-                return [], 0.0, baseline_count, baseline_count
-            best_path = final_fitness_scores[0][1]
-            best_cost = final_fitness_scores[0][0]
-            # 由得分反推最优路径的优化后大小, 避免重复运行 opt;
-            # 得分为 0 (含浮点误差下的微小负值) 时, 优化后大小与基线一致, 不反超基线
-            after_count = baseline_count if best_cost <= 0 else baseline_count * (1.0 - best_cost)
-            return best_path, best_cost, baseline_count, after_count
-        
+        best_cost, best_path = _ga_search(graph, nodes, fitness_function,
+                                          population_size=POPULATION_SIZE, generations=GENERATIONS,
+                                          mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
+                                          max_length=max_path_length)
+        # 仅在输出时加非负约束: 最优得分为负时, 负值与对应路径没有意义,
+        # 按无收益输出空路径与0分; 不改变适应度计算与选择过程
+        if best_cost < 0:
+            return [], 0.0, baseline_count, baseline_count
+        # 由得分反推最优路径的优化后大小, 避免重复运行 opt;
+        # 得分为 0 (含浮点误差下的微小负值) 时, 优化后大小与基线一致, 不反超基线;
+        # 大小本身是整数(字节数/指令数), 对反推值取整避免输出 13127.0 这类带小数尾巴的值
+        after_count = baseline_count if best_cost <= 0 else round(baseline_count * (1.0 - best_cost))
         # 返回 (最优路径, 得分, 基线大小, 优化后大小), 供调用方汇总计算平均缩减率
-        return genetic_algorithm(nodes, graph, POPULATION_SIZE, GENERATIONS, MUTATION_RATE, SELECTION_RATE, MAX_PATH_LENGTH)
+        return best_path, best_cost, baseline_count, after_count
+
+
+def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_srcs=None):
+    """为项目(全部输入文件)寻找一条公共的最优 pass 序列 (聚合适应度 GA).
+
+    file_codes: [(文件名, .ll 源码), ...];
+    baseline_srcs: 与 file_codes 对齐的 C 源文件信息列表 (C 输入时由 run.py
+    从基线清单查得), 逐文件传给基线计算, 未匹配到源文件的元素为 None;
+    适应度 = (Σ基线 - Σ优化后) / Σ基线, 即按文件大小加权的整体缩减率,
+    与调用方的汇总口径一致; 序列在个别文件上 opt 失败时回退原始 IR 计数
+    (视为无收益, 自然被惩罚);
+    基线为 0 的文件跳过; 无可评分文件或协同对列表为空时返回空路径与 0 分;
+    返回 (最优路径, 得分, 总基线大小, 总优化后大小)."""
+    if baseline_srcs is None:
+        baseline_srcs = [None] * len(file_codes)
+    # 逐文件计算基线, 基线为 0 的文件跳过
+    codes = []
+    bases = []
+    for (name, ll_code), baseline_src in zip(file_codes, baseline_srcs):
+        base = _compute_baseline(ll_code, llvm_tools_path, opt_level,
+                                 count_mode, baseline_src, label=name)
+        if base == 0:
+            print(f"{name}: {opt_level} 基线为 0, 跳过该文件.")
+            continue
+        codes.append(ll_code)
+        bases.append(base)
+    if not codes:
+        print("没有基线非 0 的文件, 无法为项目寻找公共 pass 序列.")
+        return [], 0.0, 0, 0
+    total_baseline = sum(bases)
+
+    # 协同对列表为空时无法构建图, 直接返回空路径/零分
+    if not edges:
+        print("协同对列表为空, 无法为项目寻找公共 pass 序列.\n")
+        return [], 0.0, total_baseline, total_baseline
+
+    # 创建图
+    graph = defaultdict(list)
+    nodes = set()
+    for start, end in edges:
+        graph[start].append(end)
+        nodes.add(start)
+        nodes.add(end)
+
+    # 遗传算法参数 (与单文件模式一致)
+    POPULATION_SIZE = 100
+    GENERATIONS = 10
+    MUTATION_RATE = 0.5
+    SELECTION_RATE = 0.1
+    # 序列最大长度由 max_path_length 参数控制 (默认 2)
+
+    # (文件下标, 序列) -> 优化后大小 的缓存: 不同个体/代数之间的序列大量重复,
+    # 缓存可避免重复运行 opt; 多线程下加锁避免同一序列重复计算
+    import threading
+    size_cache = {}
+    cache_lock = threading.Lock()
+
+    def file_size(index, path):
+        key = (index, tuple(path))
+        with cache_lock:
+            cached = size_cache.get(key)
+        if cached is not None:
+            return cached
+        size = get_instrcount(codes[index], list(path), llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+        with cache_lock:
+            size_cache[key] = size
+        return size
+
+    # 聚合适应度: 全项目整体缩减率, 允许个别文件为负 (拖累其他文件的序列被自然惩罚)
+    def aggregate_fitness(path):
+        total_after = 0
+        for index in range(len(codes)):
+            total_after += file_size(index, path)
+        return (total_baseline - total_after) / total_baseline, path
+
+    best_cost, best_path = _ga_search(graph, nodes, aggregate_fitness,
+                                      population_size=POPULATION_SIZE, generations=GENERATIONS,
+                                      mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
+                                      max_length=max_path_length)
+    # 输出时加非负约束 (与单文件模式一致): 最优得分为负时按无收益输出空路径与 0 分
+    if best_cost < 0:
+        return [], 0.0, total_baseline, total_baseline
+    after_count = total_baseline if best_cost <= 0 else round(total_baseline * (1.0 - best_cost))
+    return best_path, best_cost, total_baseline, after_count
+

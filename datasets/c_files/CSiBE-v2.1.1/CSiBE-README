@@ -1,0 +1,13 @@
+The software in this directory are for benchmark purposes only and
+come with their own licenses.
+
+Their sources might have been slightly modified. It is not granted
+that all necessary parts of any of the software are present, nor
+that they do not contain additional files, nor that executables
+can be produced from the present sources.
+
+To use any of these software for other purposes than benchmark
+please refer to the software's own license.
+
+The files `CSiBE-run.make.in' in the software directories belong to
+CSiBE, and are released under GNU General Public License (version 2).
