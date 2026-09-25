@@ -122,10 +122,7 @@
 - C 输入的 C→IR 编译不再固定 -O0：改用 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）生成 .ll，训练与优化都在该优化等级的 IR 上进行；仅 `--opt-level O0` 时附加 `-Xclang -disable-O0-optnone`（其余优化等级前端不会产生 optnone 属性）；ruyituner.py 提示行/帮助文本与 Readme 的 `--input_type` 参数说明、输入支持小节、注意事项同步更新。
 - 基线为 0 时的跳过提示改为"<优化等级> 基线为 0, 跳过该文件"（原"优化后为 0"是旧 IR 基线的表述；新口径下基线为 0 通常来自纯数据源文件，如 bzip2 的 randtable.c 编译出的 .o 无 .text 代码），单文件与项目模式的提示同步更新。
 - scripts/ruyi-cc.sh 前端 IR 生成优化等级改为可配置（新增 RUYITUNER_FRONT_OPT 环境变量，默认 Oz），与 C 输入的训练/评分口径一致（此前固定 -O0 -emit-llvm）；仅当前端等级为 O0 时附加 -Xclang -disable-O0-optnone，脚本头部注释与用法说明同步更新。
-<<<<<<< HEAD
 - utils/common.py 的 get_object_size 改为默认用 pic 重定位模型调用 llc（`-relocation-model=pic`）：与 clang 在 x86_64/riscv64 Linux 上的默认代码生成以及 C 输入基线（clang -O<level> -c）口径一致；此前 llc 默认 static 会少算 PLT/GOT 间接寻址开销，使 GA 评分相对实际编译略乐观（bzip2 实测同一序列 static 口径 3.79% vs pic 口径 2.91%）；Readme 的 obj-size 说明同步更新。
 - 新增已知误编译 pass 默认剔除：实测 LLVM 21.1.8/22.1.0 上 `function(structurizecfg)` 单独作用于 -Oz 级 IR 会产出功能损坏的 .o（bzip2.c 链接出的 bzip2 运行时 PANIC "compress: bad modes"，逐 pass 二分定位），`cgscc(attributor-cgscc)`/`module(attributor)` 在 bzlib.c 上使 opt 段错误（崩溃点 AAInvariantLoadPointerCallSiteReturned，attributor-light 系列实测无崩溃故保留）；utils/common.py 新增 KNOWN_MISCOMPILE_PATTERN，train.py 生成 pass 列表时按"已知误编译类"默认剔除，run.py 筛选协同对时同样剔除（使用旧 CSV 也生效）；passes_examples 下四个 pass 列表文件同步删除这三个 pass。
-=======
 - `--search_scope project` 时把最优 pass 序列写入 output/Step3_<项目名>_PassList.csv（每行一个 pass、保持序列顺序，可直接逗号连接后交给 ruyi-cc.sh；序列为空时不写文件）：run.py 新增 --project_name/--output_dir 参数（默认分别取数据集目录名与项目根目录下 output/），ruyituner.py 透传原始数据集目录名；Readme 输出说明同步更新。
->>>>>>> v1.x
 
