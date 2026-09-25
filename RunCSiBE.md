@@ -2,6 +2,8 @@
 
 本文档为RuyiTuner运行datasets/c_files/CSiBE-v2.1.1下各个项目的详细说明，每个项目都给出了运行的具体命令参数，运行过程中注意替换工具链路径为本地路径。
 
+本文档命令均使用 `--count_mode obj-size` 与 `--input_type c`：此时 RuyiTuner 的评分基线直接用 clang 以 `--opt-level`（默认 Oz）优化等级把源文件编译为 .o 后统计 .text 大小（`clang -O<level> -c`，与 CSiBE 自身的编译口径一致），文中"平均优化率"即相对该基线的整体缩减率。
+
 本文档列出的命令均未加 --search_scope 参数，默认走 file 模式：为每个文件各找一条最优 pass 序列，文中"平均优化率"即该模式下全部文件加权汇总的整体缩减率。若要为整个项目找一条公共的最优 pass 序列，在命令末尾追加 --search_scope project 即可（该模式输出一条公共 Path 与整体缩减率 Overall Reduction Rate），例如：
 
 python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project

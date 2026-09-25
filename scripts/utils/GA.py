@@ -1,6 +1,27 @@
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from utils.common import get_instrcount
+from utils.common import get_c_object_size, get_instrcount
+
+
+def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
+                      baseline_src=None, label=''):
+    '''计算单个文件的基线大小.
+
+    baseline_src 非 None 且计数方式为 obj-size 时 (即 C 输入场景), 基线改为
+    直接用 clang -O<level> -c 把 C 源码编译为 .o 并统计 .text 大小, 与真实
+    编译口径一致; clang 编译失败时回退 IR 口径基线. 其余情况维持原口径:
+    用 opt -O<level> 优化 O0 级 IR 后计数/测大小.'''
+    if baseline_src and count_mode == 'obj-size':
+        size = get_c_object_size(
+            baseline_src['src'], llvm_tools_path, opt_level=opt_level,
+            c_std=baseline_src.get('c_std'),
+            c_flags=baseline_src.get('c_flags'),
+            cwd=baseline_src.get('src_root'))
+        if size is not None:
+            return size
+        name = f' ({label})' if label else ''
+        print(f'[baseline] clang -{opt_level} -c 直接编译失败, 回退 IR 口径基线{name}.')
+    return get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
 
 
 def _ga_search(graph, nodes, fitness_function, population_size=100, generations=10,
@@ -119,12 +140,15 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
 
 
-def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2):
-        # 基线: 按用户指定的优化等级(opt_level, 默认Oz)优化后的指令数/代码大小
-        baseline_count = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_src=None):
+        # 基线: C 输入(obj-size 计数)时直接用 clang -O<level> -c 编译源码统计 .o,
+        # 否则按用户指定的优化等级(opt_level, 默认Oz)优化 O0 级 IR 后计数/测大小
+        baseline_count = _compute_baseline(ll_code, llvm_tools_path, opt_level,
+                                           count_mode, baseline_src)
         if(baseline_count == 0):
-            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印)
-            print(f"{opt_level} 优化后为 0, 跳过该文件.")
+            # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印);
+            # obj-size 口径下通常为纯数据文件 (如 bzip2 的 randtable.c, .o 的 .text 为 0 字节)
+            print(f"{opt_level} 基线为 0, 跳过该文件.")
             return [], 0.0, 0, 0
         # 协同对列表为空时无法构建图, 直接返回空路径/零分, 避免 generate_population 崩溃
         if not edges:
@@ -166,22 +190,27 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         return best_path, best_cost, baseline_count, after_count
 
 
-def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2):
+def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_srcs=None):
     """为项目(全部输入文件)寻找一条公共的最优 pass 序列 (聚合适应度 GA).
 
     file_codes: [(文件名, .ll 源码), ...];
+    baseline_srcs: 与 file_codes 对齐的 C 源文件信息列表 (C 输入时由 run.py
+    从基线清单查得), 逐文件传给基线计算, 未匹配到源文件的元素为 None;
     适应度 = (Σ基线 - Σ优化后) / Σ基线, 即按文件大小加权的整体缩减率,
     与调用方的汇总口径一致; 序列在个别文件上 opt 失败时回退原始 IR 计数
     (视为无收益, 自然被惩罚);
     基线为 0 的文件跳过; 无可评分文件或协同对列表为空时返回空路径与 0 分;
     返回 (最优路径, 得分, 总基线大小, 总优化后大小)."""
+    if baseline_srcs is None:
+        baseline_srcs = [None] * len(file_codes)
     # 逐文件计算基线, 基线为 0 的文件跳过
     codes = []
     bases = []
-    for name, ll_code in file_codes:
-        base = get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+    for (name, ll_code), baseline_src in zip(file_codes, baseline_srcs):
+        base = _compute_baseline(ll_code, llvm_tools_path, opt_level,
+                                 count_mode, baseline_src, label=name)
         if base == 0:
-            print(f"{name}: {opt_level} 优化后为 0, 跳过该文件.")
+            print(f"{name}: {opt_level} 基线为 0, 跳过该文件.")
             continue
         codes.append(ll_code)
         bases.append(base)

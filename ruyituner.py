@@ -18,8 +18,11 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step2_EnumeratedPairs.csv
 
-  # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang生成.ll到缓存目录, 流程结束自动清理)
+  # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级(默认Oz)生成.ll到缓存目录, 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
+
+  # --input_type c 搭配 --count_mode obj-size 时, 评分基线直接用 clang -O<level> -c
+  # 编译源码统计 .o 大小 (真实编译口径), 不再经过 C→IR→opt 中间过程
 
   # 预处理后的 C 源码 (.i) 数据集, 如 CSiBE 的 lwip-0.5.3.preproc (旧式代码需 --c_std gnu89)
   python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --input_type c \
@@ -35,6 +38,7 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
 """
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -81,7 +85,7 @@ def find_clang(llvm_tools_path):
     return shutil.which('clang')
 
 
-def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None):
+def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None, manifest_path=None, opt_level='Oz'):
     """用clang把src_root下所有.c/.i文件编译为.ll并放入cache_dir(保持相对目录结构).
 
     .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
@@ -89,8 +93,12 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     被其他源文件 #include 的 .i 片段 (如 jikespg 的 lpgact.i) 不单独编译, 跳过并提示;
     编译在数据集根目录 (src_root) 下执行, c_flags 中的相对路径 (如 -Iinclude)
     以数据集根目录为基准解析;
+    opt_level 为 IR 生成时的优化等级 (默认 Oz, 与 --opt-level 一致), 以
+    clang -<opt_level> -S -emit-llvm 编译; 仅 -O0 附加 -Xclang -disable-O0-optnone;
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
     c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
+    manifest_path 非 None 时把 .ll 相对路径 -> 原始源文件 的映射连同 src_root/
+    c_std/c_flags 写入该 JSON 文件, 供优化阶段用 clang 直接编译源码统计基线;
     编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
     src_root = os.path.abspath(src_root)
@@ -169,8 +177,10 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
         rel = os.path.relpath(src, src_root)
         dst = os.path.join(cache_dir, os.path.splitext(rel)[0] + '.ll')
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        cmd = [clang, '-O0', '-S', '-emit-llvm',
-               '-Xclang', '-disable-O0-optnone']
+        cmd = [clang, f'-{opt_level}', '-S', '-emit-llvm']
+        # 仅 -O0 需要附加 -disable-O0-optnone, 其余优化等级前端不会产生 optnone 属性
+        if opt_level == 'O0':
+            cmd += ['-Xclang', '-disable-O0-optnone']
         if c_flags:
             cmd += shlex.split(c_flags)
         if c_std is not None:
@@ -200,6 +210,25 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
             print(f'  - {msg}')
         if len(failures) > 20:
             print(f'  ... 其余 {len(failures) - 20} 个省略')
+
+    # 基线清单: 优化阶段据此用 clang -O<level> -c 直接编译源文件统计基线,
+    # 跳过 "C→IR→opt" 的中间过程, 更贴近真实编译; 只收录实际生成出 .ll 的
+    # 源文件, 编译失败(无 .ll)的源文件优化阶段本来也不会处理
+    if manifest_path is not None:
+        files_map = {}
+        for src in src_files:
+            rel = os.path.relpath(src, src_root)
+            ir_rel = os.path.splitext(rel)[0] + '.ll'
+            if os.path.isfile(os.path.join(cache_dir, ir_rel)):
+                files_map[ir_rel] = os.path.abspath(src)
+        manifest = {
+            'src_root': src_root,
+            'c_std': c_std,
+            'c_flags': c_flags,
+            'files': files_map,
+        }
+        with open(manifest_path, 'w', encoding='utf-8') as fh:
+            json.dump(manifest, fh, ensure_ascii=False, indent=2)
     return ok, len(failures)
 
 
@@ -211,7 +240,7 @@ def main():
                         help='数据集目录 (训练与优化共用)')
     parser.add_argument('--input_type', type=str, required=True,
                         choices=['ll', 'c'],
-                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang生成.ll再走原路径)')
+                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级生成.ll再走原路径)')
     parser.add_argument('--c_std', type=str, default=None,
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
     parser.add_argument('--c_flags', type=str, default=None,
@@ -281,10 +310,11 @@ def main():
             sys.exit(1)
         std_info = f', C 标准: {args.c_std}' if args.c_std else ''
         flags_info = f', 额外参数: {args.c_flags}' if args.c_flags else ''
-        print(f'[ruyituner] 输入为 c: 使用 clang 把 .c/.i 编译为 .ll ({clang}{std_info}{flags_info})')
+        print(f'[ruyituner] 输入为 c: 使用 clang 以 -{args.opt_level} 把 .c/.i 编译为 .ll ({clang}{std_info}{flags_info})')
         cache_dir = tempfile.mkdtemp(prefix='ruyituner_ir_')
         print(f'[ruyituner] IR 缓存目录: {cache_dir}')
-        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags)
+        manifest_path = os.path.join(cache_dir, 'baseline_manifest.json')
+        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags, manifest_path=manifest_path, opt_level=args.opt_level)
         if ok == 0:
             print('[ruyituner] 未能从任何 .c/.i 文件生成 .ll, 终止.')
             shutil.rmtree(cache_dir, ignore_errors=True)
@@ -319,6 +349,10 @@ def main():
                        '--count_mode', args.count_mode,
                        '--search_scope', args.search_scope,
                        '--max-path-length', str(args.max_path_length)]
+            if args.input_type == 'c':
+                # C 输入: 把基线清单传给 run.py, obj-size 计数方式下基线改用
+                # clang -O<level> -c 直接编译源码生成 .o 统计
+                run_cmd += ['--baseline_manifest', manifest_path]
             print('=' * 60)
             print(f'[ruyituner] 阶段 2/2: GA 优化 (数据集: {dataset}, 协同对: {paircsv})')
             print('=' * 60)

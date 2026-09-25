@@ -2,7 +2,7 @@
 # ruyi-cc.sh — 方案二编译器包装脚本: 在正常编译流程中应用 RuyiTuner 找到的最优 pass 序列.
 #
 # 工作原理 (与 RuyiTuner 评分口径一致, 序列整条替换优化管线):
-#   真实 clang  -O0 -S -emit-llvm -Xclang -disable-O0-optnone   -> 前端生成 IR (与训练输入一致)
+#   真实 clang -<前端优化等级> -S -emit-llvm                    -> 前端生成 IR (与训练输入一致)
 #   -> opt -S -passes=<RUYITUNER_PASS_SEQ>                      -> 应用最优 pass 序列
 #   -> llc -filetype=obj                                        -> 后端生成目标文件
 #
@@ -17,6 +17,7 @@
 #   export RUYITUNER_PASS_SEQ='mem2reg,instcombine'                              # 必填: pass 序列(逗号分隔)
 #   export RUYITUNER_C_STD=gnu89                                                 # 可选: 追加 -std=<值> (旧式 C 代码)
 #   export RUYITUNER_C_FLAGS='-DHAVE_CONFIG_H'                                   # 可选: 按空白拆分追加
+#   export RUYITUNER_FRONT_OPT=Oz                                                 # 可选: 前端 IR 生成优化等级, 默认 Oz (与训练口径一致)
 #   export RUYITUNER_RELOC_MODEL=static                                          # 可选: 强制 llc 使用 static 重定位模型
 #   make CC=/path/to/ruyi-cc.sh                                                  # 作为 CC 使用
 #
@@ -108,7 +109,11 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         *)    front_args+=("$a") ;;
     esac
 done
-front_args+=(-O0 -Xclang -disable-O0-optnone -S -emit-llvm)
+# 前端 IR 生成优化等级与训练/评分口径一致 (默认 Oz, 即 --opt-level 默认值);
+# 仅 O0 需要附加 -disable-O0-optnone, 其余优化等级前端不会产生 optnone 属性
+front_opt="${RUYITUNER_FRONT_OPT:-Oz}"
+front_args+=("-$front_opt" -S -emit-llvm)
+[ "$front_opt" = "O0" ] && front_args+=(-Xclang -disable-O0-optnone)
 [ -n "${RUYITUNER_C_STD:-}" ]   && front_args+=("-std=$RUYITUNER_C_STD")
 [ -n "${RUYITUNER_C_FLAGS:-}" ] && read -ra _extra <<<"$RUYITUNER_C_FLAGS" && front_args+=("${_extra[@]}")
 front_args+=("$src")

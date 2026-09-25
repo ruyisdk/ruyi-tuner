@@ -113,3 +113,13 @@
 - RunCSiBE.md 补充 --search_scope 说明：文中命令默认 file 模式（平均优化率为全部文件加权汇总的整体缩减率），并给出追加 --search_scope project 的示例命令。
 - 新增 --max-path-length 参数（ruyituner.py/run.py，默认 2）：控制 GA 初始种群中 pass 序列的最大长度；此前 utils/GA.py 中写死 MAX_PATH_LENGTH=2，现作为参数穿透到两个 GA 入口函数；该值仅约束初始种群，交叉/变异产生的后代不重新施加该上限；Readme 参数说明同步更新。
 - 新增 scripts/ruyi-cc.sh 编译器包装脚本：把 RuyTuner 找到的最优 pass 序列应用到项目的正常编译流程（真实clang -O0 -emit-llvm → opt -passes=<序列> → llc -filetype=obj），作为 CC 使用即可（make CC=scripts/ruyi-cc.sh）；序列按评分口径自动做 fix_loop_nesting 嵌套处理，-O 优化等级被忽略、管线完全由序列决定；链接/预处理/依赖生成等场景直通真实 clang，opt 失败回退无序列编译；-fPIC/-mcmodel 等代码生成选项同步转发给 llc，并默认使用 pic 重定位模型（llc 默认 static，与 clang 在 x86_64 上默认 pic 不一致，可用 RUYITUNER_RELOC_MODEL 覆盖）；相关环境变量：RUYITUNER_LLVM_BIN、RUYITUNER_PASS_SEQ、RUYITUNER_C_STD、RUYITUNER_C_FLAGS、RUYITUNER_REAL_CC；已在 bzip2-1.0.2 上验证全量编译、链接与压缩/解压功能正常。
+
+### 1.9版本变更
+- C 输入（`--input_type c`）且 `--count_mode obj-size` 时，GA 评分基线改用真实编译口径：直接用 clang 以 `--opt-level` 指定优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`），不再走 C→IR（前端）→opt→llc 的中间过程，更贴近实际编译；训练与 GA 优化过程完全不变，仅变更基线数据来源；
+- ruyituner.py 的 C→IR 编译在缓存目录下生成基线清单 baseline_manifest.json（映射 .ll 相对路径→原始 .c/.i 源文件，并记录数据集根目录与 --c_std/--c_flags），经 run.py 新增的 --baseline_manifest 参数传入优化阶段；只收录成功生成出 .ll 的源文件，编译失败的源文件不参与评分；
+- utils/common.py 新增 get_c_object_size 函数：调用 clang -O<level> -c 把 C 源码编译为 .o 并用 llvm-size 解析 .text 大小（与 get_object_size 共用新的 _parse_obj_text_size 解析逻辑）；utils/GA.py 新增基线计算入口 _compute_baseline，两个 GA 函数（单文件/项目模式）新增 baseline_src/baseline_srcs 参数；
+- 基线口径的回退与边界：clang 直接编译失败时回退原 IR 口径基线并提示；--count_mode 为 text/opt-stats/auto（非 obj-size）时基线维持 IR 口径不变（run.py 会打印提示）；未提供 --baseline_manifest 时行为与旧版本完全一致。
+- C 输入的 C→IR 编译不再固定 -O0：改用 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）生成 .ll，训练与优化都在该优化等级的 IR 上进行；仅 `--opt-level O0` 时附加 `-Xclang -disable-O0-optnone`（其余优化等级前端不会产生 optnone 属性）；ruyituner.py 提示行/帮助文本与 Readme 的 `--input_type` 参数说明、输入支持小节、注意事项同步更新。
+- 基线为 0 时的跳过提示改为"<优化等级> 基线为 0, 跳过该文件"（原"优化后为 0"是旧 IR 基线的表述；新口径下基线为 0 通常来自纯数据源文件，如 bzip2 的 randtable.c 编译出的 .o 无 .text 代码），单文件与项目模式的提示同步更新。
+- scripts/ruyi-cc.sh 前端 IR 生成优化等级改为可配置（新增 RUYITUNER_FRONT_OPT 环境变量，默认 Oz），与 C 输入的训练/评分口径一致（此前固定 -O0 -emit-llvm）；仅当前端等级为 O0 时附加 -Xclang -disable-O0-optnone，脚本头部注释与用法说明同步更新。
+
