@@ -241,15 +241,15 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     return ok, len(failures)
 
 
-def real_compile_with_seq(src_root, src_files, obj_dir, clang, llvm_tools_path,
+def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
                           seq, opt_level, c_std=None, c_flags=None, num_workers=16):
     """把 GA 找到的最优 pass 序列实际应用到源码编译, 生成 .o 到 obj_dir 下.
 
-    编译管线与评分口径/ruyi-cc.sh 一致: clang -<level> -S -emit-llvm (仅 O0
-    附加 -Xclang -disable-O0-optnone) -> opt -S -passes=<序列> -> llc
-    -relocation-model=pic -filetype=obj; 序列管线任一环节失败时回退
-    clang -<level> -c 直通编译 (与 ruyi-cc.sh 的回退行为一致);
-    返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
+    ll_items: [(相对路径, .ll 缓存文件, 源文件), ...]; 前端 IR 直接复用 C→IR
+    阶段生成的 .ll, 不再重复运行 clang 前端; 后续管线与评分口径一致:
+    opt -S -passes=<序列> -> llc -relocation-model=pic -filetype=obj;
+    任一环节失败时回退 clang -<level> -c 直通编译 (与 ruyi-cc.sh 的回退行为
+    一致); 返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
     bin_dir = llvm_tools_path or ''
     opt_path = os.path.join(bin_dir, 'opt') if bin_dir else 'opt'
     llc_path = os.path.join(bin_dir, 'llc') if bin_dir else 'llc'
@@ -257,35 +257,24 @@ def real_compile_with_seq(src_root, src_files, obj_dir, clang, llvm_tools_path,
     seq_fixed = fix_loop_nesting(','.join(seq))
     tmpdir = tempfile.mkdtemp(prefix='ruyituner_realcc_')
 
-    def _work(src):
-        rel = os.path.relpath(src, src_root)
+    def _work(item):
+        rel, ll_path, src = item
         dst = os.path.join(obj_dir, os.path.splitext(rel)[0] + '.o')
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         work = tempfile.mkdtemp(dir=tmpdir)
         try:
-            front_ll = os.path.join(work, 'front.ll')
             opt_ll = os.path.join(work, 'opt.ll')
-            cmd = [clang, f'-{opt_level}', '-S', '-emit-llvm']
-            if opt_level == 'O0':
-                cmd += ['-Xclang', '-disable-O0-optnone']
-            if c_flags:
-                cmd += shlex.split(c_flags)
-            if c_std is not None:
-                cmd.append(f'-std={c_std}')
-            cmd += [src, '-o', front_ll]
-            proc = subprocess.run(cmd, capture_output=True, text=True, cwd=src_root)
+            proc = subprocess.run([opt_path, '-S', f'-passes={seq_fixed}',
+                                   ll_path, '-o', opt_ll],
+                                  capture_output=True, text=True)
             if proc.returncode == 0:
-                proc = subprocess.run([opt_path, '-S', f'-passes={seq_fixed}',
-                                       front_ll, '-o', opt_ll],
+                proc = subprocess.run([llc_path, '-relocation-model=pic',
+                                       '-filetype=obj', opt_ll, '-o', dst],
                                       capture_output=True, text=True)
                 if proc.returncode == 0:
-                    proc = subprocess.run([llc_path, '-relocation-model=pic',
-                                           '-filetype=obj', opt_ll, '-o', dst],
-                                          capture_output=True, text=True)
-                    if proc.returncode == 0:
-                        size = get_object_file_text_size(dst, llvm_tools_path)
-                        if size is not None:
-                            return rel, size, ''
+                    size = get_object_file_text_size(dst, llvm_tools_path)
+                    if size is not None:
+                        return rel, size, ''
             # 序列管线失败: 回退 clang 直通编译, 保证构建产物完整
             fb = [clang, f'-{opt_level}', '-c']
             if c_flags:
@@ -293,6 +282,7 @@ def real_compile_with_seq(src_root, src_files, obj_dir, clang, llvm_tools_path,
             if c_std is not None:
                 fb.append(f'-std={c_std}')
             fb += [src, '-o', dst]
+            # 在数据集根目录下执行, 使 c_flags 中的相对路径以数据集根目录为基准解析
             proc = subprocess.run(fb, capture_output=True, text=True, cwd=src_root)
             if proc.returncode != 0:
                 lines = [line for line in proc.stderr.splitlines() if line.strip()]
@@ -308,7 +298,7 @@ def real_compile_with_seq(src_root, src_files, obj_dir, clang, llvm_tools_path,
     fallback = 0
     failures = []
     with ThreadPoolExecutor(max_workers=num_workers) as ex:
-        for rel, size, note in ex.map(_work, src_files):
+        for rel, size, note in ex.map(_work, ll_items):
             if size is None:
                 failures.append(f'{rel}: {note}')
             else:
@@ -323,8 +313,9 @@ def run_real_compile_stage(args, out_dir, cache_dir):
     """实际编译对比: 序列读 Step3 Pass 列表 CSV, 基线复用前一步的 Result.json.
 
     序列与基线均来自前一步 GA 优化 (ruyituner.py 已计算), 不重新计算;
-    源文件与编译参数取 C→IR 阶段生成的基线清单; .o 输出到
-    output/<项目名>/ 目录; 最后输出实际编译后的代码体积缩减率."""
+    前端 IR 复用 C→IR 阶段生成的 .ll (不重复运行 clang 前端), 源文件与编译
+    参数取 C→IR 阶段的基线清单; .o 输出到 output/<项目名>/ 目录; 最后输出
+    实际编译后的代码体积缩减率."""
     project = os.path.basename(os.path.normpath(args.dataset)) or 'dataset'
     csv_path = os.path.join(out_dir, f'Step3_{project}_PassList.csv')
     json_path = os.path.join(out_dir, f'Step3_{project}_Result.json')
@@ -349,12 +340,18 @@ def run_real_compile_stage(args, out_dir, cache_dir):
         with open(manifest_path, encoding='utf-8') as fh:
             manifest = json.load(fh)
         src_root = manifest.get('src_root') or args.dataset
-        src_files = list((manifest.get('files') or {}).values())
+        files_map = manifest.get('files') or {}
     except (OSError, ValueError):
         print('[ruyituner] 无法读取基线清单, 跳过实际编译对比.')
         return
-    if not src_files:
-        print('[ruyituner] 基线清单为空, 跳过实际编译对比.')
+    # 前端 IR 复用 C→IR 阶段生成的 .ll, 不再重复运行 clang 前端
+    ll_items = []
+    for rel, src in files_map.items():
+        ll_path = os.path.join(cache_dir, rel)
+        if os.path.isfile(ll_path):
+            ll_items.append((rel, ll_path, src))
+    if not ll_items:
+        print('[ruyituner] 缓存目录中没有可用的 .ll 文件, 跳过实际编译对比.')
         return
     clang = find_clang(args.llvm_tools_path)
     if clang is None:
@@ -366,7 +363,7 @@ def run_real_compile_stage(args, out_dir, cache_dir):
     print(f'[ruyituner] .o 输出目录: {obj_dir}')
     print('=' * 60)
     total_text, fallback, failures = real_compile_with_seq(
-        src_root, src_files, obj_dir, clang, args.llvm_tools_path, seq,
+        src_root, ll_items, obj_dir, clang, args.llvm_tools_path, seq,
         args.opt_level, args.c_std, args.c_flags, args.num_workers)
     print(f'[ruyituner] 基线大小 (来自前一步 GA 输出): {int(baseline)}')
     print(f'[ruyituner] 实际编译后总大小: {total_text}')
