@@ -247,6 +247,15 @@ def check_dataset_arch_matches_opt(ll_files, opt_path):
                 f'{path}: IR 目标架构 {ir_arch} 与 opt 默认目标 {opt_arch} 不一致, '
                 f'请使用与数据集架构匹配的工具链 opt (--llvm_tools_path).')
 
+def find_clang(llvm_tools_path):
+    '''查找 clang: 优先使用 llvm_tools_path 下的 clang, 否则回退到系统 PATH.'''
+    if llvm_tools_path:
+        cand = os.path.join(llvm_tools_path, 'clang')
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return shutil.which('clang')
+
+
 def dataset_output_name(dataset_path):
     '''数据集用于输出文件命名的名称: 目录取目录名, 单个文件取文件名 (去后缀).'''
     d = os.path.abspath(dataset_path)

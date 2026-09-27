@@ -8,11 +8,13 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 ![工作流程图](./RuyiTuner-principle-diagram.png)
 
-工作流程在实现上可以分为两个阶段：
+工作流程在实现上可以分为三个阶段：
 
-1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step2 协同对 CSV 供优化阶段使用。
+1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step1 协同对 CSV 供优化阶段使用。
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
+
+3. **实际编译对比阶段** (real_compile.py): 仅 C 输入且项目模式（`--input_type c` 且 `--search_scope project`）时执行，由 ruyituner.py 调用——读取优化阶段写出的 `Step2_<项目名>_PassList.csv` 与 `Step2_<项目名>_Result.json`，用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线 `opt 序列 → llc pic` 与评分口径一致，失败回退 clang 直通编译），.o 输出到 `output/<项目名>/`，最终输出实际编译后总大小与实际代码体积缩减率。
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由输入的LLVM目标架构决定，天然支持 x86、RISC-V 等架构。
 
@@ -45,6 +47,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 ├── scripts/             # 主要执行脚本
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
+│   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
 │   ├── extract_tuner_data.py # 辅助脚本：从运行日志抽取实际编译对比数据生成CSV/TSV
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
@@ -57,7 +60,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 ### 1. 一键完成训练与优化（ruyituner.py）
 
-ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段；`--input_type c` 且 `--search_scope project` 时，GA 优化之后还会用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线与评分口径一致），与前面计算出的基线对比并输出实际代码体积缩减率。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
+ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段；`--input_type c` 且 `--search_scope project` 时，GA 优化之后还会由 `scripts/real_compile.py` 用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线与评分口径一致），与前面计算出的基线对比并输出实际代码体积缩减率。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
 
 **使用演示：**
 
@@ -220,7 +223,7 @@ python3 run.py \
 - 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
 - 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
 - 把找到的最优 pass 序列逐行写入 `output/Step2_<项目名>_PassList.csv`（每行一个 pass、保持顺序，可直接逗号连接后用于实际编译；序列为空时不写文件），并把基线/优化后大小/缩减率写入 `output/Step2_<项目名>_Result.json`（供实际编译对比复用，不重新计算）
-- 经 `ruyituner.py` 入口且为 C 输入项目模式时，接着用该序列实际编译源码（序列读 PassList CSV、基线读 Result.json、参数取自 ruyituner.py，.o 输出到 `output/<项目名>/`，前端 IR 复用 C→IR 阶段生成的 .ll、不重复运行 clang 前端，失败回退 clang 直通编译），最终输出实际编译后总大小与实际代码体积缩减率
+- 经 `ruyituner.py` 入口且为 C 输入项目模式时，接着由 `scripts/real_compile.py` 用该序列实际编译源码（序列读 PassList CSV、基线读 Result.json、参数取自 ruyituner.py，.o 输出到 `output/<项目名>/`，前端 IR 复用 C→IR 阶段生成的 .ll、不重复运行 clang 前端，失败回退 clang 直通编译），最终输出实际编译后总大小与实际代码体积缩减率
 - 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**

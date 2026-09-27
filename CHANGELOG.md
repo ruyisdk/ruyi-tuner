@@ -132,4 +132,5 @@
 - 输出文件与产出阶段重新对应编号：训练阶段输出的协同对枚举文件由 Step2_EnumeratedPairs.csv 改为 Step1_EnumeratedPairs.csv；GA 优化阶段写出的 Step3_<项目名>_PassList.csv / Step3_<项目名>_Result.json 改为 Step2_ 前缀（对应阶段 2/3）；ruyituner.py/run.py/train.py 中的文件名、提示与帮助文本及 Readme 相应更新。
 - Step1 协同对枚举文件命名改为 Step1_<项目名>_EnumeratedPairs.csv（与 Step2 系列命名模式一致）：数据集为目录时取目录名，为单个 .ll 文件时取文件名；train.py 新增 --project_name 参数（ruyituner.py 自动传入，C 输入时保证命名取源数据集目录名而非 IR 缓存目录名），并支持单文件数据集；utils/common.py 新增 dataset_output_name 函数；ruyituner.py 的 --paircsv 默认路径、run.py 的 --project_name 透传（单文件数据集下项目名由文件名去后缀）与 Readme 相应更新。
 - ruyituner.py 的 --dataset 支持单个 .c/.i 源文件（--input_type c）：compile_c_dataset_to_ir 单文件时以其所在目录为数据集根、只编译该文件，训练/优化/GA 走正常流程，Step1 枚举文件按文件名命名；ruyituner.py/train.py 的 --dataset 帮助文本与 Readme 相应更新。
+- 把实际编译对比阶段从 ruyituner.py 拆分为独立脚本 scripts/real_compile.py（与 train.py/run.py 一致，由 ruyituner.py 以子进程调用）：ruyituner.py 删除 run_real_compile_stage/real_compile_with_seq 函数，find_clang 移入 utils/common.py 供两个入口复用；输出格式不变；Readme 项目结构树与相关说明更新。
 
