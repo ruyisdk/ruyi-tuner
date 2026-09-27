@@ -287,7 +287,7 @@ def generate_passlist(args, write_default=True):
 gen_only = '--gen_passlist_only' in sys.argv
 
 args = ap.ArgumentParser()
-args.add_argument("--dataset", type=str, required=not gen_only, help="Dataset path for training containing .ll files (required for training)")
+args.add_argument("--dataset", type=str, required=not gen_only, help="Dataset path for training: directory containing .ll files or a single .ll file (required for training)")
 args.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
 args.add_argument("--output_dir", type=str, default=None, help="output file path; if not provided, defaults to <project_root>/output and is created automatically")
 args.add_argument("--num_workers", type=int, default=16, help="number of workers for parallel processing")

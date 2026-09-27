@@ -98,6 +98,7 @@ def find_clang(llvm_tools_path):
 def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None, manifest_path=None, opt_level='Oz'):
     """用clang把src_root下所有.c/.i文件编译为.ll并放入cache_dir(保持相对目录结构).
 
+    src_root 也可以是单个 .c/.i 文件: 此时以其所在目录为数据集根, 只编译该文件;
     .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
     同名 .c 与 .i 并存时优先 .c;
     被其他源文件 #include 的 .i 片段 (如 jikespg 的 lpgact.i) 不单独编译, 跳过并提示;
@@ -112,28 +113,38 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
     src_root = os.path.abspath(src_root)
-    if not os.path.isdir(src_root):
-        print(f'[ruyituner] 数据集目录不存在: {src_root}')
-        return 0, 0
-    src_files = []
-    claimed = set()
-    num_c = 0
-    num_i = 0
-    for ext in ('.c', '.i'):
-        for root, _dirs, files in os.walk(src_root):
-            for name in sorted(files):
-                if not name.endswith(ext):
-                    continue
-                src = os.path.join(root, name)
-                stem = os.path.splitext(os.path.relpath(src, src_root))[0]
-                if stem in claimed:
-                    continue
-                claimed.add(stem)
-                src_files.append(src)
-                if ext == '.c':
-                    num_c += 1
-                else:
-                    num_i += 1
+    single_file = os.path.isfile(src_root)
+    if single_file:
+        # 单个源文件: 以其所在目录为数据集根, 只编译该文件
+        if not src_root.endswith(('.c', '.i')):
+            print(f'[ruyituner] 数据集文件类型不支持: {src_root} (仅支持 .c / .i)')
+            return 0, 0
+        src_files = [src_root]
+        src_root = os.path.dirname(src_root)
+        num_c, num_i = (1, 0) if src_files[0].endswith('.c') else (0, 1)
+    else:
+        if not os.path.isdir(src_root):
+            print(f'[ruyituner] 数据集目录不存在: {src_root}')
+            return 0, 0
+        src_files = []
+        claimed = set()
+        num_c = 0
+        num_i = 0
+        for ext in ('.c', '.i'):
+            for root, _dirs, files in os.walk(src_root):
+                for name in sorted(files):
+                    if not name.endswith(ext):
+                        continue
+                    src = os.path.join(root, name)
+                    stem = os.path.splitext(os.path.relpath(src, src_root))[0]
+                    if stem in claimed:
+                        continue
+                    claimed.add(stem)
+                    src_files.append(src)
+                    if ext == '.c':
+                        num_c += 1
+                    else:
+                        num_i += 1
     if not src_files:
         print(f'[ruyituner] {src_root} 下未找到任何 .c 或 .i 文件.')
         return 0, 0
@@ -149,7 +160,7 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     # 代码片段 (如 jikespg 的 lpgact.i 被 lpgparse.c 包含, 片段引用的全局变量
     # 定义在包含方); 单独编译必然失败且无必要, 找出这类片段并跳过
     include_re = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
-    if num_i:
+    if num_i and not single_file:
         i_names = {os.path.basename(s) for s in src_files if s.endswith('.i')}
         i_frag = {}
         scan_done = False
@@ -385,7 +396,7 @@ def main():
         description='ruyituner: 一键完成训练(train.py)与优化(run.py)',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dataset', type=str, required=True,
-                        help='数据集目录 (训练与优化共用)')
+                        help='数据集目录或单个 .c/.i 源文件 (训练与优化共用)')
     parser.add_argument('--input_type', type=str, required=True,
                         choices=['ll', 'c'],
                         help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级生成.ll再走原路径)')
