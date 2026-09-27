@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
+ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目模式下的实际编译对比.
 
 默认流程:
-  1. 训练:  运行 scripts/train.py, 输出 Step1_FindSynerPairs.csv 与 Step2_EnumeratedPairs.csv;
-  2. 优化:  用训练得到的协同 pass 对运行 scripts/run.py 进行 GA 优化.
+  1. 训练:  运行 scripts/train.py, 输出 Step1_<项目名>_EnumeratedPairs.csv;
+  2. 优化:  用训练得到的协同 pass 对运行 scripts/run.py 进行 GA 优化;
+  3. 实际编译对比 (仅 --input_type c 且 --search_scope project): 运行
+     scripts/real_compile.py, 用 GA 找到的最优序列
+     (output/Step2_<项目名>_PassList.csv) 实际编译源码, .o 输出到
+     output/<项目名>/, 基线复用优化阶段写出的 Step2_<项目名>_Result.json,
+     最终输出实际代码体积缩减率 (与评分口径一致).
 
 用法示例:
   # 完整流程 (训练 + 优化)
@@ -14,9 +19,9 @@ ruyituner: 一键完成训练(train.py)与优化(run.py)两个阶段.
   # 仅训练 (不优化)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
 
-  # 仅优化 (需要已有 Step2_EnumeratedPairs.csv)
+  # 仅优化 (需要已有 Step1_<项目名>_EnumeratedPairs.csv, 如 x86 数据集对应 Step1_x86_EnumeratedPairs.csv)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
-      --paircsv output/Step2_EnumeratedPairs.csv
+      --paircsv output/Step1_x86_EnumeratedPairs.csv
 
   # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级(默认Oz)生成.ll到缓存目录, 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
@@ -51,7 +56,12 @@ from concurrent.futures import ThreadPoolExecutor
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 TRAIN_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'train.py')
 RUN_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'run.py')
+REAL_COMPILE_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'real_compile.py')
 DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
+
+# scripts/ 目录加入模块搜索路径, 复用公共函数 (dataset_output_name 等)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
+from utils.common import find_clang, dataset_output_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
 
 
 def build_train_cmd(args, dataset):
@@ -60,7 +70,8 @@ def build_train_cmd(args, dataset):
            '--dataset', dataset,
            '--llvm_tools_path', args.llvm_tools_path,
            '--num_workers', str(args.num_workers),
-           '--count_mode', args.count_mode]
+           '--count_mode', args.count_mode,
+           '--project_name', dataset_output_name(args.dataset)]
     if args.output_dir is not None:
         cmd += ['--output_dir', args.output_dir]
     if args.passfile is not None:
@@ -76,18 +87,10 @@ def build_train_cmd(args, dataset):
     return cmd
 
 
-def find_clang(llvm_tools_path):
-    """查找clang: 优先使用 --llvm_tools_path 下的clang, 否则回退到系统PATH."""
-    if llvm_tools_path:
-        cand = os.path.join(llvm_tools_path, 'clang')
-        if os.path.isfile(cand) and os.access(cand, os.X_OK):
-            return cand
-    return shutil.which('clang')
-
-
 def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None, c_flags=None, manifest_path=None, opt_level='Oz'):
     """用clang把src_root下所有.c/.i文件编译为.ll并放入cache_dir(保持相对目录结构).
 
+    src_root 也可以是单个 .c/.i 文件: 此时以其所在目录为数据集根, 只编译该文件;
     .c 为 C 源码; .i 为预处理后的 C 源码 (cc -E 输出), clang 直接按预处理输入编译;
     同名 .c 与 .i 并存时优先 .c;
     被其他源文件 #include 的 .i 片段 (如 jikespg 的 lpgact.i) 不单独编译, 跳过并提示;
@@ -102,28 +105,38 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     编译失败的源文件告警跳过; 返回 (成功数, 失败数).
     """
     src_root = os.path.abspath(src_root)
-    if not os.path.isdir(src_root):
-        print(f'[ruyituner] 数据集目录不存在: {src_root}')
-        return 0, 0
-    src_files = []
-    claimed = set()
-    num_c = 0
-    num_i = 0
-    for ext in ('.c', '.i'):
-        for root, _dirs, files in os.walk(src_root):
-            for name in sorted(files):
-                if not name.endswith(ext):
-                    continue
-                src = os.path.join(root, name)
-                stem = os.path.splitext(os.path.relpath(src, src_root))[0]
-                if stem in claimed:
-                    continue
-                claimed.add(stem)
-                src_files.append(src)
-                if ext == '.c':
-                    num_c += 1
-                else:
-                    num_i += 1
+    single_file = os.path.isfile(src_root)
+    if single_file:
+        # 单个源文件: 以其所在目录为数据集根, 只编译该文件
+        if not src_root.endswith(('.c', '.i')):
+            print(f'[ruyituner] 数据集文件类型不支持: {src_root} (仅支持 .c / .i)')
+            return 0, 0
+        src_files = [src_root]
+        src_root = os.path.dirname(src_root)
+        num_c, num_i = (1, 0) if src_files[0].endswith('.c') else (0, 1)
+    else:
+        if not os.path.isdir(src_root):
+            print(f'[ruyituner] 数据集目录不存在: {src_root}')
+            return 0, 0
+        src_files = []
+        claimed = set()
+        num_c = 0
+        num_i = 0
+        for ext in ('.c', '.i'):
+            for root, _dirs, files in os.walk(src_root):
+                for name in sorted(files):
+                    if not name.endswith(ext):
+                        continue
+                    src = os.path.join(root, name)
+                    stem = os.path.splitext(os.path.relpath(src, src_root))[0]
+                    if stem in claimed:
+                        continue
+                    claimed.add(stem)
+                    src_files.append(src)
+                    if ext == '.c':
+                        num_c += 1
+                    else:
+                        num_i += 1
     if not src_files:
         print(f'[ruyituner] {src_root} 下未找到任何 .c 或 .i 文件.')
         return 0, 0
@@ -139,7 +152,7 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     # 代码片段 (如 jikespg 的 lpgact.i 被 lpgparse.c 包含, 片段引用的全局变量
     # 定义在包含方); 单独编译必然失败且无必要, 找出这类片段并跳过
     include_re = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
-    if num_i:
+    if num_i and not single_file:
         i_names = {os.path.basename(s) for s in src_files if s.endswith('.i')}
         i_frag = {}
         scan_done = False
@@ -232,12 +245,30 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     return ok, len(failures)
 
 
+def build_real_compile_cmd(args, out_dir, cache_dir, total_stages):
+    """构造实际编译对比脚本 (scripts/real_compile.py) 的命令."""
+    cmd = [sys.executable, REAL_COMPILE_SCRIPT,
+           '--project_name', dataset_output_name(args.dataset),
+           '--output_dir', out_dir,
+           '--cache_dir', cache_dir,
+           '--llvm_tools_path', args.llvm_tools_path,
+           '--opt_level', args.opt_level,
+           '--num_workers', str(args.num_workers),
+           '--total_stages', str(total_stages)]
+    if args.c_std is not None:
+        cmd += ['--c_std', args.c_std]
+    if args.c_flags is not None:
+        # --c_flags 的值常以 - 开头, 用 --c_flags=<值> 形式避免子脚本解析失败
+        cmd += [f'--c_flags={args.c_flags}']
+    return cmd
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='ruyituner: 一键完成训练(train.py)与优化(run.py)',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dataset', type=str, required=True,
-                        help='数据集目录 (训练与优化共用)')
+                        help='数据集目录或单个 .c/.i 源文件 (训练与优化共用)')
     parser.add_argument('--input_type', type=str, required=True,
                         choices=['ll', 'c'],
                         help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级生成.ll再走原路径)')
@@ -277,7 +308,7 @@ def main():
     parser.add_argument('--only_run', action='store_true',
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
-                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step2_EnumeratedPairs.csv')
+                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step1_<项目名>_EnumeratedPairs.csv')
     # --c_flags 的值常以 - 开头 (如 -DHAVE_CONFIG_H), argparse 会误当成选项报
     # "expected one argument"; 解析前把 "--c_flags <值>" 合并为 "--c_flags=<值>"
     argv = list(sys.argv[1:])
@@ -301,6 +332,11 @@ def main():
     print(f'[ruyituner] 计数方式: {args.count_mode}')
     print(f'[ruyituner] 寻找优化序列的范围: {args.search_scope}')
     print('=' * 60)
+
+    # C 输入 + 项目模式时, GA 优化之后还有实际编译对比阶段
+    do_real_compile = (args.input_type == 'c' and args.search_scope == 'project'
+                       and not args.only_train)
+    total_stages = 3 if do_real_compile else 2
 
     cache_dir = None
     if args.input_type == 'c':
@@ -329,7 +365,7 @@ def main():
         if not args.only_run:
             os.makedirs(out_dir, exist_ok=True)
             print('=' * 60)
-            print(f'[ruyituner] 阶段 1/2: 训练 (数据集: {dataset}, 输出目录: {out_dir})')
+            print(f'[ruyituner] 阶段 1/{total_stages}: 训练 (数据集: {dataset}, 输出目录: {out_dir})')
             print('=' * 60)
             rc = subprocess.run(build_train_cmd(args, dataset)).returncode
             if rc != 0:
@@ -337,7 +373,7 @@ def main():
                 sys.exit(rc)
 
         if not args.only_train:
-            paircsv = args.paircsv or os.path.join(out_dir, 'Step2_EnumeratedPairs.csv')
+            paircsv = args.paircsv or os.path.join(out_dir, f'Step1_{dataset_output_name(args.dataset)}_EnumeratedPairs.csv')
             if not os.path.isfile(paircsv):
                 print(f'[ruyituner] 找不到协同对文件: {paircsv}, 请先完成训练.')
                 sys.exit(1)
@@ -348,18 +384,25 @@ def main():
                        '--opt-level', args.opt_level,
                        '--count_mode', args.count_mode,
                        '--search_scope', args.search_scope,
-                       '--max-path-length', str(args.max_path_length)]
+                       '--max-path-length', str(args.max_path_length),
+                       '--output_dir', out_dir,
+                       '--project_name', dataset_output_name(args.dataset)]
             if args.input_type == 'c':
                 # C 输入: 把基线清单传给 run.py, obj-size 计数方式下基线改用
                 # clang -O<level> -c 直接编译源码生成 .o 统计
                 run_cmd += ['--baseline_manifest', manifest_path]
             print('=' * 60)
-            print(f'[ruyituner] 阶段 2/2: GA 优化 (数据集: {dataset}, 协同对: {paircsv})')
+            print(f'[ruyituner] 阶段 2/{total_stages}: GA 优化 (数据集: {dataset}, 协同对: {paircsv})')
             print('=' * 60)
             rc = subprocess.run(run_cmd).returncode
             if rc != 0:
                 print(f'[ruyituner] 优化失败 (exit={rc}).')
                 sys.exit(rc)
+            if do_real_compile:
+                rc = subprocess.run(build_real_compile_cmd(args, out_dir, cache_dir, total_stages)).returncode
+                if rc != 0:
+                    print(f'[ruyituner] 实际编译对比失败 (exit={rc}).')
+                    sys.exit(rc)
 
         print('[ruyituner] 全部完成.')
     finally:

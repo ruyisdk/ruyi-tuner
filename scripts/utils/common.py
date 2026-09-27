@@ -81,6 +81,10 @@ def get_object_size(ir_code, llvm_tools_path=None):
     目标架构由 IR 内嵌的 target triple 决定 (与 get_instrcount 一致); .text
     段大小由 llvm-size 从 .o 中解析, 不含符号表/重定位等 ELF 结构开销; llc 或
     llvm-size 不存在、编译/解析失败时返回 None, 由调用方决定回退策略.
+
+    重定位模型默认 pic: clang 在 x86_64/riscv64 Linux 上默认生成 PIC 代码,
+    C 输入基线 (clang -O<level> -c) 也是 PIC, 两者口径一致; 用 llc 默认
+    static 会少算 PLT/GOT 间接寻址开销, 使评分相对实际编译略乐观.
     '''
     if not isinstance(ir_code, str):
         raise RuntimeError('输入不是字符串, 无法编译为 .o')
@@ -90,7 +94,8 @@ def get_object_size(ir_code, llvm_tools_path=None):
     tmpdir = tempfile.mkdtemp(prefix='ruyituner_')
     obj_path = os.path.join(tmpdir, 'output.o')
     try:
-        r = subprocess.run([llc_path, '-filetype=obj', '-o', obj_path, '-'],
+        r = subprocess.run([llc_path, '-relocation-model=pic', '-filetype=obj',
+                            '-o', obj_path, '-'],
                            input=ir_code, capture_output=True, text=True)
         if r.returncode != 0:
             _report_opt_failure('llc:filetype=obj', r.stderr)
@@ -136,6 +141,18 @@ def get_c_object_size(src_path, llvm_tools_path=None, opt_level='Oz',
         return None
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def get_object_file_text_size(obj_path, llvm_tools_path=None):
+    '''用 llvm-size 解析已有 .o 文件的 .text 段大小(字节); 失败返回 None.
+
+    供 ruyituner.py 的实际编译对比阶段复用 obj-size 口径的 .text 解析逻辑.'''
+    bin_dir = llvm_tools_path or ''
+    llvm_size_path = os.path.join(bin_dir, 'llvm-size') if bin_dir else 'llvm-size'
+    try:
+        return _parse_obj_text_size(obj_path, llvm_size_path)
+    except FileNotFoundError:
+        return None
 
 
 # 支持的计数方式开关: auto(自动选择), opt-stats, text, obj-size
@@ -229,6 +246,23 @@ def check_dataset_arch_matches_opt(ll_files, opt_path):
             raise SystemExit(
                 f'{path}: IR 目标架构 {ir_arch} 与 opt 默认目标 {opt_arch} 不一致, '
                 f'请使用与数据集架构匹配的工具链 opt (--llvm_tools_path).')
+
+def find_clang(llvm_tools_path):
+    '''查找 clang: 优先使用 llvm_tools_path 下的 clang, 否则回退到系统 PATH.'''
+    if llvm_tools_path:
+        cand = os.path.join(llvm_tools_path, 'clang')
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return shutil.which('clang')
+
+
+def dataset_output_name(dataset_path):
+    '''数据集用于输出文件命名的名称: 目录取目录名, 单个文件取文件名 (去后缀).'''
+    d = os.path.abspath(dataset_path)
+    if os.path.isfile(d):
+        return os.path.splitext(os.path.basename(d))[0]
+    return os.path.basename(os.path.normpath(d)) or 'dataset'
+
 
 def fix_loop_nesting(pipeline: str) -> str:
     '''

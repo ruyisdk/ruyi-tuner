@@ -6,13 +6,15 @@
 
 RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工具，在目标架构的 LLVM IR 上自动搜索能够最大化缩减代码体积/提升性能的优化序列。与固定的传统优化流水线（如 -O3/-Oz）不同，RuyiTuner 通过实际运行数据、挖掘优化"协同效应"，找出一些优化组合——这些组合所产生的优化效果优于各优化单独作用之和，并以这些协同对为搜索空间、基于遗传算法搜索最优的优化序列。
 
-![工作流程图](./RuyiTuner-principle-diagram.png)
+![工作流程图](./RuyiTuner-principle-diagramV2.0.png)
 
-工作流程在实现上可以分为两个阶段：
+工作流程在实现上可以分为三个阶段：
 
-1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step1/Step2 两级 CSV 供优化阶段使用。
+1. **训练阶段** (train.py): 首先根据所用 LLVM 工具链版本自动生成匹配的 Pass 列表——从 `opt --print-passes` 读取注册表，剔除观察/调试类、插桩类以及会清空整个模块的 `internalize` 等无益 Pass，并对每个候选 Pass 进行运行与输出可解析性双重验证；随后对数据集中的每个 .ll 文件逐一测试所有单 Pass 与 Pass 对组合，找出"组合效果严格优于单 Pass"的协同对，输出 Step1 协同对 CSV 供优化阶段使用（对应工作流程图 1-3 部分）。
 
-2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率。
+2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率（对应工作流程图 4-5 部分）。
+
+3. **实际编译对比阶段** (real_compile.py): 仅 C 输入且项目模式（`--input_type c` 且 `--search_scope project`）时执行，由 ruyituner.py 调用——读取优化阶段写出的 `Step2_<项目名>_PassList.csv` 与 `Step2_<项目名>_Result.json`，用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线 `opt 序列 → llc pic` 与评分口径一致，失败回退 clang 直通编译），.o 输出到 `output/<项目名>/`，最终输出实际编译后总大小与实际代码体积缩减率（对应工作流程图 6 部分）。
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由输入的LLVM目标架构决定，天然支持 x86、RISC-V 等架构。
 
@@ -34,8 +36,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   │   └── riscv/       #   RISC-V架构: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
 │   └── c_files/         # C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
 ├── output/              # 训练输出结果
-│   ├── Step1_FindSynerPairs.csv       # 发现的协同Pass对(已过滤空结果)
-│   ├── Step2_EnumeratedPairs.csv      # 枚举的所有协同对
+│   ├── Step1_<数据集名>_EnumeratedPairs.csv # 枚举的所有协同对(数据集名=目录名或单文件名)
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -46,6 +47,8 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 ├── scripts/             # 主要执行脚本
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
+│   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
+│   ├── extract_tuner_data.py # 辅助脚本：从运行日志抽取实际编译对比数据生成CSV/TSV
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -57,7 +60,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 ### 1. 一键完成训练与优化（ruyituner.py）
 
-ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step1/Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
+ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完成训练与GA优化两个阶段；`--input_type c` 且 `--search_scope project` 时，GA 优化之后还会由 `scripts/real_compile.py` 用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线与评分口径一致），与前面计算出的基线对比并输出实际代码体积缩减率。输入为数据集目录与 LLVM 工具链路径，输入文件类型由 `--input_type` 指定（ll=LLVM IR；c=C 源码，先用工具链中的 clang 生成 .ll 到临时缓存目录再走后续流程，结束后自动清理）；训练阶段输出协同 Pass 对 CSV（Step2），优化阶段输出每个文件的最优 Pass 序列与得分。全流程可由 ruyituner.py 一键完成，也支持单独训练（train.py）或单独优化（run.py）
 
 **使用演示：**
 
@@ -75,13 +78,13 @@ python3 ruyituner.py \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_train
 
-# 仅优化（复用已有的Step2_EnumeratedPairs.csv）
+# 仅优化（复用已有的Step1_x86_EnumeratedPairs.csv）
 python3 ruyituner.py \
     --dataset ./datasets/ll_files/x86 \
     --input_type ll \
     --llvm_tools_path /llvm_dir/build/bin \
     --only_run \
-    --paircsv ./output/Step2_EnumeratedPairs.csv
+    --paircsv ./output/Step1_x86_EnumeratedPairs.csv
 
 # 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数。
 python3 ruyituner.py \
@@ -102,14 +105,14 @@ python3 ruyituner.py \
 ```
 
 **参数说明：**
-- `--dataset`: 数据集目录（必选，训练与优化共用）
+- `--dataset`: 数据集目录或单个 .c/.i 源文件（必选，训练与优化共用）
 - `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先`--llvm_tools_path`下的clang，回退系统PATH）以`--opt-level`指定的优化等级（默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
 - `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
 - `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时不传；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
 - `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
-- `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step2_EnumeratedPairs.csv`
+- `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step1_<项目名>_EnumeratedPairs.csv`
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）；`--input_type c` 搭配 `obj-size` 时，评分基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计（`clang -O<level> -c`，不再经过 C→IR→opt 中间过程），其余组合基线仍按 IR 统计
@@ -127,7 +130,7 @@ python3 ruyituner.py \
 - **单 Pass 筛选**：把候选 pass 列表中的每个 pass 单独作用于该文件（`opt -passes=<pass>`）并统计指令数；凡是比原始 IR 指令数更少的 pass，进入"有效 pass"集合；
 - **两两配对**：对每个有效 pass 作为序列后段 B，与全部候选 pass 依次组成两段序列 `[A, B]`（A 在前、B 在后）运行并统计指令数；若 `[A, B]` 的指令数比 B 单独运行时更少（即加入 A 能带来额外收益），则把 `(A, B)` 记为协同对。
 
-所有文件找到的协同对汇总去重后，分别写入 Step1（按文件保存协同对列表）与 Step2（枚举全部唯一协同对，供优化阶段的 GA 使用）。
+所有文件找到的协同对汇总去重后，写入 Step1_<数据集名>_EnumeratedPairs.csv（数据集为目录时取目录名，为单个 .ll 文件时取文件名；枚举全部唯一协同对，供优化阶段的 GA 使用）。
 
 **使用演示：**
 
@@ -169,8 +172,7 @@ python3 train.py \
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
 
 **输出文件：**
-- `Step1_FindSynerPairs.csv`: 发现的协同Pass对（写入时已过滤掉空列表行）
-- `Step2_EnumeratedPairs.csv`: 枚举所有协同对的最终结果
+- `Step1_<数据集名>_EnumeratedPairs.csv`: 枚举所有协同对的最终结果（命名取数据集目录名；数据集为单个 .ll 文件时取文件名）
 
 ### 3. 优化阶段：使用GA优化代码
 
@@ -195,7 +197,7 @@ cd scripts
 python3 run.py \
     --dataset ../datasets/ll_files/x86 \
     --llvm_tools_path ../llvm_dir/build/bin \
-    --paircsv ../output/Step2_EnumeratedPairs.csv
+    --paircsv ../output/Step1_x86_EnumeratedPairs.csv
 ```
 
 **参数说明：**
@@ -220,6 +222,8 @@ python3 run.py \
 - 输出公共 Pass 序列（`Path`）
 - 输出全部文件的总基线大小（`Total Baseline Size`）与总优化后大小（`Total Optimized Size`）
 - 打印整体缩减率（`Overall Reduction Rate`）与对应的文件总数（`Done: one common pass sequence for N files.`）
+- 把找到的最优 pass 序列逐行写入 `output/Step2_<项目名>_PassList.csv`（每行一个 pass、保持顺序，可直接逗号连接后用于实际编译；序列为空时不写文件），并把基线/优化后大小/缩减率写入 `output/Step2_<项目名>_Result.json`（供实际编译对比复用，不重新计算）
+- 经 `ruyituner.py` 入口且为 C 输入项目模式时，接着由 `scripts/real_compile.py` 用该序列实际编译源码（序列读 PassList CSV、基线读 Result.json、参数取自 ruyituner.py，.o 输出到 `output/<项目名>/`，前端 IR 复用 C→IR 阶段生成的 .ll、不重复运行 clang 前端，失败回退 clang 直通编译），最终输出实际编译后总大小与实际代码体积缩减率
 - 经 `ruyituner.py` 入口运行时，末尾还有 `[ruyituner] 全部完成.` 等收尾信息（`--input_type c` 时含 IR 缓存清理提示）
 
 **输出示例：**
@@ -254,7 +258,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
 - `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
 - `text`：强制按 IR 文本缩进规律统计指令行数；
-- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
+- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积；llc 默认使用 pic 重定位模型，与 clang 在 x86_64/riscv64 Linux 上的默认代码生成及 C 输入基线一致，避免 static 口径少算 PLT/GOT 间接寻址开销）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
 
 四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
 
@@ -263,9 +267,26 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
 
 - **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
-- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark）。工具链需包含 clang，先用 clang 以 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源与 C→IR 生成统一采用 `--opt-level` 优化等级。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
+- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。工具链需包含 clang，先用 clang 以 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源与 C→IR 生成统一采用 `--opt-level` 优化等级。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。
+
+### 6. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
+
+从 ruyituner 的运行日志（如实际编译对比阶段的输出）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
+
+- 输出列：项目名称、x86 基线大小、x86 实际编译后总大小、x86 实际代码体积缩减率、riscv 基线大小、riscv 实际编译后总大小、riscv 实际代码体积缩减率（缩减率数值带 % 号）；
+- 输出文件后缀决定列分隔符：`.tsv` 用制表符（粘贴到 Excel/WPS 时每列自动分开），其余后缀用逗号；也可用 `--delimiter` 显式指定；
+- 日志中只有项目名、没有编译结果的项目不写入输出。
+
+**使用演示：**
+
+```bash
+# 生成制表符分隔的文件
+python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.tsv
+# 生成逗号分隔的 CSV
+python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.csv
+```
 
 ## 注意事项
 
