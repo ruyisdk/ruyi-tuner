@@ -46,6 +46,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 ├── scripts/             # 主要执行脚本
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
+│   ├── extract_tuner_data.py # 辅助脚本：从运行日志抽取实际编译对比数据生成CSV/TSV
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -268,6 +269,23 @@ RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节
 - **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark）。工具链需包含 clang，先用 clang 以 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源与 C→IR 生成统一采用 `--opt-level` 优化等级。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。
+
+### 6. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
+
+从 ruyituner 的运行日志（如实际编译对比阶段的输出）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
+
+- 输出列：项目名称、x86 基线大小、x86 实际编译后总大小、x86 实际代码体积缩减率、riscv 基线大小、riscv 实际编译后总大小、riscv 实际代码体积缩减率（缩减率数值带 % 号）；
+- 输出文件后缀决定列分隔符：`.tsv` 用制表符（粘贴到 Excel/WPS 时每列自动分开），其余后缀用逗号；也可用 `--delimiter` 显式指定；
+- 日志中只有项目名、没有编译结果的项目不写入输出。
+
+**使用演示：**
+
+```bash
+# 生成制表符分隔的文件
+python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.tsv
+# 生成逗号分隔的 CSV
+python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.csv
+```
 
 ## 注意事项
 

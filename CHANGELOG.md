@@ -126,4 +126,5 @@
 - 删除 scripts/ruyi-cc.sh 编译器包装脚本及其相关说明：该脚本的实际编译能力已并入 ruyituner.py 的实际编译对比阶段，独立包装脚本不再需要；Readme 与脚本内引用同步清理。
 - utils/common.py 的 get_object_size 改为默认 pic 重定位模型（`llc -relocation-model=pic`）：与 clang 在 x86_64/riscv64 Linux 上的默认代码生成、C 输入基线（clang -O<level> -c）以及实际编译对比阶段的编译口径一致；此前 llc 默认 static 少算 PLT/GOT 间接寻址开销，使 GA 评分相对实际编译偏乐观（bzip2 实测同一序列 static 口径 29.13% vs pic/实际 28.80%）；改后 GA 逐文件计数与实际编译产物完全一致（差值 0）。
 - 实际编译对比阶段不再重复生成 .ll：前端 IR 直接复用 C→IR 阶段生成到缓存目录的 .ll（按基线清单取相对路径），管线变为 缓存 .ll → opt 序列 → llc pic，省去一遍 clang 前端；opt/llc 失败时仍回退 clang -<level> -c 直通编译（在数据集根目录下执行）；ruyituner.py 的 real_compile_with_seq 参数相应改为 (src_root, ll_items, ...)，Readme 说明同步更新。
+- 新增 scripts/extract_tuner_data.py 数据抽取辅助脚本：从 ruyituner 运行日志中抽取各项目在 x86/riscv 两种架构下的实际编译对比数据（基线大小、实际编译后总大小、实际代码体积缩减率），生成 CSV/TSV；输出文件后缀决定列分隔符（.tsv 用制表符、其余用逗号，也可用 --delimiter 显式指定），缩减率数值带 % 号，日志中只有项目名没有数据的项目不写入；Readme 补充脚本使用说明并在项目结构树中新增条目。
 
