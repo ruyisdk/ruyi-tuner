@@ -309,7 +309,7 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
     return total_text, fallback, failures
 
 
-def run_real_compile_stage(args, out_dir, cache_dir):
+def run_real_compile_stage(args, out_dir, cache_dir, total_stages):
     """实际编译对比: 序列读 Step3 Pass 列表 CSV, 基线复用前一步的 Result.json.
 
     序列与基线均来自前一步 GA 优化 (ruyituner.py 已计算), 不重新计算;
@@ -359,7 +359,7 @@ def run_real_compile_stage(args, out_dir, cache_dir):
         return
     obj_dir = os.path.join(out_dir, project)
     print('=' * 60)
-    print(f'[ruyituner] 实际编译对比 (项目: {project}, 序列 {len(seq)} 个 pass)')
+    print(f'[ruyituner] 阶段 3/{total_stages}: 实际编译对比 (项目: {project}, 序列 {len(seq)} 个 pass)')
     print(f'[ruyituner] .o 输出目录: {obj_dir}')
     print('=' * 60)
     total_text, fallback, failures = real_compile_with_seq(
@@ -515,7 +515,7 @@ def main():
                 print(f'[ruyituner] 优化失败 (exit={rc}).')
                 sys.exit(rc)
             if do_real_compile:
-                run_real_compile_stage(args, out_dir, cache_dir)
+                run_real_compile_stage(args, out_dir, cache_dir, total_stages)
 
         print('[ruyituner] 全部完成.')
     finally:
