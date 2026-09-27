@@ -4,11 +4,11 @@
 ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目模式下的实际编译对比.
 
 默认流程:
-  1. 训练:  运行 scripts/train.py, 输出 Step1_FindSynerPairs.csv 与 Step2_EnumeratedPairs.csv;
+  1. 训练:  运行 scripts/train.py, 输出 Step1_<项目名>_EnumeratedPairs.csv;
   2. 优化:  用训练得到的协同 pass 对运行 scripts/run.py 进行 GA 优化;
   3. 实际编译对比 (仅 --input_type c 且 --search_scope project): 用 GA 找到的最优
-     序列 (output/Step3_<项目名>_PassList.csv) 实际编译源码, .o 输出到
-     output/<项目名>/, 基线复用优化阶段写出的 Step3_<项目名>_Result.json,
+     序列 (output/Step2_<项目名>_PassList.csv) 实际编译源码, .o 输出到
+     output/<项目名>/, 基线复用优化阶段写出的 Step2_<项目名>_Result.json,
      最终输出实际代码体积缩减率 (与评分口径一致).
 
 用法示例:
@@ -18,9 +18,9 @@ ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目�
   # 仅训练 (不优化)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
 
-  # 仅优化 (需要已有 Step2_EnumeratedPairs.csv)
+  # 仅优化 (需要已有 Step1_<项目名>_EnumeratedPairs.csv, 如 x86 数据集对应 Step1_x86_EnumeratedPairs.csv)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
-      --paircsv output/Step2_EnumeratedPairs.csv
+      --paircsv output/Step1_x86_EnumeratedPairs.csv
 
   # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级(默认Oz)生成.ll到缓存目录, 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
@@ -60,7 +60,7 @@ DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
 
 # scripts/ 目录加入模块搜索路径, 复用评分口径的公共函数 (fix_loop_nesting 等)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
-from utils.common import fix_loop_nesting, get_object_file_text_size  # type: ignore  # 依赖上面的 sys.path 运行时解析
+from utils.common import fix_loop_nesting, get_object_file_text_size, dataset_output_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
 
 
 def build_train_cmd(args, dataset):
@@ -69,7 +69,8 @@ def build_train_cmd(args, dataset):
            '--dataset', dataset,
            '--llvm_tools_path', args.llvm_tools_path,
            '--num_workers', str(args.num_workers),
-           '--count_mode', args.count_mode]
+           '--count_mode', args.count_mode,
+           '--project_name', dataset_output_name(args.dataset)]
     if args.output_dir is not None:
         cmd += ['--output_dir', args.output_dir]
     if args.passfile is not None:
@@ -317,8 +318,8 @@ def run_real_compile_stage(args, out_dir, cache_dir, total_stages):
     参数取 C→IR 阶段的基线清单; .o 输出到 output/<项目名>/ 目录; 最后输出
     实际编译后的代码体积缩减率."""
     project = os.path.basename(os.path.normpath(args.dataset)) or 'dataset'
-    csv_path = os.path.join(out_dir, f'Step3_{project}_PassList.csv')
-    json_path = os.path.join(out_dir, f'Step3_{project}_Result.json')
+    csv_path = os.path.join(out_dir, f'Step2_{project}_PassList.csv')
+    json_path = os.path.join(out_dir, f'Step2_{project}_Result.json')
     if not os.path.isfile(csv_path):
         print(f'[ruyituner] 未找到 {csv_path}, 跳过实际编译对比.')
         return
@@ -424,7 +425,7 @@ def main():
     parser.add_argument('--only_run', action='store_true',
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
-                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step2_EnumeratedPairs.csv')
+                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step1_<项目名>_EnumeratedPairs.csv')
     # --c_flags 的值常以 - 开头 (如 -DHAVE_CONFIG_H), argparse 会误当成选项报
     # "expected one argument"; 解析前把 "--c_flags <值>" 合并为 "--c_flags=<值>"
     argv = list(sys.argv[1:])
@@ -489,7 +490,7 @@ def main():
                 sys.exit(rc)
 
         if not args.only_train:
-            paircsv = args.paircsv or os.path.join(out_dir, 'Step2_EnumeratedPairs.csv')
+            paircsv = args.paircsv or os.path.join(out_dir, f'Step1_{dataset_output_name(args.dataset)}_EnumeratedPairs.csv')
             if not os.path.isfile(paircsv):
                 print(f'[ruyituner] 找不到协同对文件: {paircsv}, 请先完成训练.')
                 sys.exit(1)
@@ -502,7 +503,7 @@ def main():
                        '--search_scope', args.search_scope,
                        '--max-path-length', str(args.max_path_length),
                        '--output_dir', out_dir,
-                       '--project_name', os.path.basename(os.path.normpath(args.dataset)) or 'dataset']
+                       '--project_name', dataset_output_name(args.dataset)]
             if args.input_type == 'c':
                 # C 输入: 把基线清单传给 run.py, obj-size 计数方式下基线改用
                 # clang -O<level> -c 直接编译源码生成 .o 统计

@@ -1,6 +1,4 @@
 import os
-import csv
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from utils.common import get_instrcount
 
@@ -12,9 +10,8 @@ class PassSyner:
         self.Passes = passlist
         self.num_works = num_works
         self.count_mode = count_mode
-        self.lock = threading.Lock()
 
-    def _process_file(self, filepath, output_csv_path):
+    def _process_file(self, filepath):
         with open(filepath, 'r') as ll_file:
             ll_code = ll_file.read()
         print("Processing:", filepath)
@@ -45,31 +42,34 @@ class PassSyner:
         
         filename = os.path.basename(filepath)
 
-        # 空列表行直接跳过, 不写入，替代原来的过滤步骤
+        # 空列表直接跳过
         if not syner_passpairs:
-            return
+            return None
+        return filename, syner_passpairs
 
-        with self.lock:
-            with open(output_csv_path, 'a', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow([filename, syner_passpairs])
+    def FindSynerPasses(self):
+        """查找所有 .ll 文件的协同 pass 对, 返回 [(文件名, [(A, B), ...]), ...].
 
-    def FindSynerPasses(self, output_csv_path):
+        结果不再写 CSV, 在内存中返回供调用方直接枚举去重."""
         ll_files = []
-        for root, dirs, files in os.walk(self.datasetpath):
-            for file in files:
-                if file.endswith(".ll"):
-                    ll_files.append(os.path.join(root, file))
+        if os.path.isfile(self.datasetpath):
+            if self.datasetpath.endswith('.ll'):
+                ll_files.append(self.datasetpath)
+        else:
+            for root, dirs, files in os.walk(self.datasetpath):
+                for file in files:
+                    if file.endswith(".ll"):
+                        ll_files.append(os.path.join(root, file))
 
-        with open(output_csv_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(['Filename', 'Synerpairlist'])
-
+        results = []
         with ThreadPoolExecutor(max_workers=self.num_works) as executor:
-            futures = [executor.submit(self._process_file, filepath, output_csv_path) for filepath in ll_files]
+            futures = [executor.submit(self._process_file, filepath) for filepath in ll_files]
             for future in futures:
-                future.result()
+                result = future.result()
+                if result is not None:
+                    results.append(result)
 
-        print(f"Results saved to {output_csv_path}")
+        print(f"协同对查找完成: {len(results)} 个文件找到协同 pass 对.")
+        return results
 
     

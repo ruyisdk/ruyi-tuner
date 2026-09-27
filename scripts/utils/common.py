@@ -247,6 +247,14 @@ def check_dataset_arch_matches_opt(ll_files, opt_path):
                 f'{path}: IR 目标架构 {ir_arch} 与 opt 默认目标 {opt_arch} 不一致, '
                 f'请使用与数据集架构匹配的工具链 opt (--llvm_tools_path).')
 
+def dataset_output_name(dataset_path):
+    '''数据集用于输出文件命名的名称: 目录取目录名, 单个文件取文件名 (去后缀).'''
+    d = os.path.abspath(dataset_path)
+    if os.path.isfile(d):
+        return os.path.splitext(os.path.basename(d))[0]
+    return os.path.basename(os.path.normpath(d)) or 'dataset'
+
+
 def fix_loop_nesting(pipeline: str) -> str:
     '''
         把loop pass嵌套进离他最近的前面的function pass中，因为loop pass不能单独使用

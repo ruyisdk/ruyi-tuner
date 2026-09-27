@@ -128,4 +128,7 @@
 - 实际编译对比阶段不再重复生成 .ll：前端 IR 直接复用 C→IR 阶段生成到缓存目录的 .ll（按基线清单取相对路径），管线变为 缓存 .ll → opt 序列 → llc pic，省去一遍 clang 前端；opt/llc 失败时仍回退 clang -<level> -c 直通编译（在数据集根目录下执行）；ruyituner.py 的 real_compile_with_seq 参数相应改为 (src_root, ll_items, ...)，Readme 说明同步更新。
 - 新增 scripts/extract_tuner_data.py 数据抽取辅助脚本：从 ruyituner 运行日志中抽取各项目在 x86/riscv 两种架构下的实际编译对比数据（基线大小、实际编译后总大小、实际代码体积缩减率），生成 CSV/TSV；输出文件后缀决定列分隔符（.tsv 用制表符、其余用逗号，也可用 --delimiter 显式指定），缩减率数值带 % 号，日志中只有项目名没有数据的项目不写入；Readme 补充脚本使用说明并在项目结构树中新增条目。
 - 修复实际编译对比阶段缺少阶段标题的问题：该阶段现输出 `[ruyituner] 阶段 3/3: 实际编译对比 ...`，与训练、GA 优化阶段的 `阶段 1/3`、`阶段 2/3` 标题格式一致（阶段总数经参数传入）。
+- 训练阶段不再保存 Step1_FindSynerPairs.csv：协同对查找结果改在内存中传递（utils/PassSyner.py 的 FindSynerPasses 不再写文件而是返回结果列表），只输出 Step2_EnumeratedPairs.csv；ruyituner.py 顶部说明与 Readme 相应更新。
+- 输出文件与产出阶段重新对应编号：训练阶段输出的协同对枚举文件由 Step2_EnumeratedPairs.csv 改为 Step1_EnumeratedPairs.csv；GA 优化阶段写出的 Step3_<项目名>_PassList.csv / Step3_<项目名>_Result.json 改为 Step2_ 前缀（对应阶段 2/3）；ruyituner.py/run.py/train.py 中的文件名、提示与帮助文本及 Readme 相应更新。
+- Step1 协同对枚举文件命名改为 Step1_<项目名>_EnumeratedPairs.csv（与 Step2 系列命名模式一致）：数据集为目录时取目录名，为单个 .ll 文件时取文件名；train.py 新增 --project_name 参数（ruyituner.py 自动传入，C 输入时保证命名取源数据集目录名而非 IR 缓存目录名），并支持单文件数据集；utils/common.py 新增 dataset_output_name 函数；ruyituner.py 的 --paircsv 默认路径、run.py 的 --project_name 透传（单文件数据集下项目名由文件名去后缀）与 Readme 相应更新。
 

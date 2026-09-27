@@ -21,7 +21,6 @@ import re
 import subprocess
 import argparse as ap
 import csv
-import ast
 from concurrent.futures import ThreadPoolExecutor
 
 # Get the absolute path of the current file
@@ -33,7 +32,7 @@ sys.path.append(project_root)
 sys.path.insert(0, os.path.dirname(current_file_path))
 
 from utils.PassSyner import PassSyner
-from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt
+from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt, dataset_output_name
 
 # ============================================================================
 # pass 列表生成
@@ -300,6 +299,7 @@ args.add_argument("--keep_instrumentation", action='store_true', help="keep inst
 args.add_argument("--extra_exclude", type=str, default=None, help="extra exclude rules for the generated pass list (regex)")
 args.add_argument("--count_mode", type=str, default='auto', choices=['auto', 'opt-stats', 'text', 'obj-size'],
                   help="instruction counting mode: auto (default) | opt-stats | text | obj-size")
+args.add_argument("--project_name", type=str, default=None, help="project name used to name the output CSV (default: derived from the dataset directory or file name)")
 args = args.parse_args()
 
 if args.gen_passlist_only:
@@ -315,10 +315,7 @@ if args.output_dir is None:
 
 print("计数方式:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
 
-"""
-Step 1. Find synergistic pairs and save to Step1 CSV
-(空列表行在写入时直接跳过)
-"""
+# 查找协同 pass 对: 结果不再落盘, 在内存中直接用于后续的枚举去重
 
 if args.passfile:
     if not os.path.exists(args.passfile):
@@ -330,50 +327,38 @@ else:
     passlist = generate_passlist(args, write_default=False)
 
 # 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
-dataset_files = []
-for root, _, files in os.walk(args.dataset):
-    for f in files:
-        if f.endswith('.ll'):
-            dataset_files.append(os.path.join(root, f))
+if os.path.isfile(args.dataset):
+    dataset_files = [args.dataset] if args.dataset.endswith('.ll') else []
+else:
+    dataset_files = []
+    for root, _, files in os.walk(args.dataset):
+        for f in files:
+            if f.endswith('.ll'):
+                dataset_files.append(os.path.join(root, f))
 check_dataset_arch_matches_opt(dataset_files, os.path.join(args.llvm_tools_path, 'opt'))
 
 syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
-output_file = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
-syner.FindSynerPasses(output_file)
-print("Step1 Completed: Synergistic pairs have been found and saved to Step1_FindSynerPairs.csv (rows with empty lists are skipped)")
+results = syner.FindSynerPasses()
 
-"""
-Step 2. Enumerate synergistic pairs and save to a new CSV
-"""
-input_path = os.path.join(args.output_dir, 'Step1_FindSynerPairs.csv')
-output_path = os.path.join(args.output_dir, 'Step2_EnumeratedPairs.csv')
+# 枚举所有文件找到的协同对并去重, 写入 Step1 CSV (命名含数据集名)
+name = args.project_name or dataset_output_name(args.dataset)
+output_path = os.path.join(args.output_dir, f'Step1_{name}_EnumeratedPairs.csv')
 
 syner_list = []
-# Open the original CSV file
-with open(input_path, mode='r', encoding='utf-8') as file:
-    reader = csv.DictReader(file)
-    
-    # Open the new CSV file for writing enumerated results
-    with open(output_path, mode='w', encoding='utf-8', newline='') as outfile:
-        writer = csv.writer(outfile)
-        
-        # Write the header
-        writer.writerow(['index', 'synerpair'])
-        
-        # Enumerate all list values in the rows and write to the new file
-        index_counter = 0
-        seen_elements = set()
-        for row in reader:
-            # Get the value from the 'Synerpairlist' column and parse it as a list
-            value_str = row['Synerpairlist']
-            value_list = ast.literal_eval(value_str)
-            
-            # Enumerate the values in the list and skip duplicates
-            for element in value_list:
-                if element not in seen_elements:
-                    writer.writerow([index_counter, element])
-                    syner_list.append(element)
-                    seen_elements.add(element)
-                    index_counter += 1
-    
-print("Step2 Completed: Enumeration completed and saved to Step2_EnumeratedPairs.csv")
+seen_elements = set()
+with open(output_path, mode='w', encoding='utf-8', newline='') as outfile:
+    writer = csv.writer(outfile)
+    # Write the header
+    writer.writerow(['index', 'synerpair'])
+
+    # Enumerate all pairs across files and skip duplicates
+    index_counter = 0
+    for _filename, pairs in results:
+        for element in pairs:
+            if element not in seen_elements:
+                writer.writerow([index_counter, element])
+                syner_list.append(element)
+                seen_elements.add(element)
+                index_counter += 1
+
+print(f"Step1 Completed: Enumeration completed and saved to Step1_{name}_EnumeratedPairs.csv")
