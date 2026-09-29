@@ -48,6 +48,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
+│   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出
 │   ├── extract_tuner_data.py # 辅助脚本：从运行日志抽取实际编译对比数据生成CSV/TSV
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
@@ -269,7 +270,7 @@ RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节
 - **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
 - **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。工具链需包含 clang，先用 clang 以 `--opt-level` 指定的优化等级（默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源与 C→IR 生成统一采用 `--opt-level` 优化等级。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
-CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。
+CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
 ### 6. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
 
@@ -287,6 +288,40 @@ python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.ts
 # 生成逗号分隔的 CSV
 python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.csv
 ```
+
+### 7. CSiBE 批量运行脚本（scripts/run_csibe.py）
+
+按 RunCSiBE.md 中列出的命令，用 x86 与 RISC-V 两套工具链批量运行 CSiBE 各 benchmark（project 模式），并把每个项目的实际编译对比阶段（阶段 3/3）输出汇总到一个文件。脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入 `output/CSiBE_Step3_summary.txt`（某次运行未产生该阶段时记录退出码与输出末尾）。
+
+**使用演示：**
+
+```bash
+# 用两套工具链批量运行 RunCSiBE.md 中的全部项目
+python3 scripts/run_csibe.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --riscv_path /llvm_dir/build-riscv/bin
+
+# 只跑 x86，且只跑指定项目
+python3 scripts/run_csibe.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --riscv_path /llvm_dir/build-riscv/bin \
+    --only_arch x86 \
+    --projects compiler,jpeg-6b
+
+# 只打印将执行的命令，不实际运行
+python3 scripts/run_csibe.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --riscv_path /llvm_dir/build-riscv/bin \
+    --dry_run
+```
+
+**参数说明：**
+- `--x86_path`/`--riscv_path`: x86/RISC-V 工具链目录（含 opt/clang/llc 等，替换 RunCSiBE.md 中对应的占位路径）；只跑一个架构时未用到的路径可不提供
+- `--md_file`: (可选) RunCSiBE.md 路径，默认项目根目录下的 RunCSiBE.md
+- `--output`: (可选) 汇总输出文件，默认 `output/CSiBE_Step3_summary.txt`，自动创建目录
+- `--only_arch`: (可选) 只跑一个架构（x86/riscv）
+- `--projects`: (可选) 只跑指定项目（逗号分隔项目名）
+- `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
 ## 注意事项
 

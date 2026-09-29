@@ -89,16 +89,8 @@ python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/ --llv
 18个文件都能成功，平均优化率8.95%
 
 ## 9.linux-2.4.23-pre3-testplatform
-x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/linux-2.4.23-pre3-testplatform     --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
- C→IR 编译完成: 成功 22 个, 失败 878 个.
-CSiBE编译出来的，直接没有这个项目。Linux 内核的 .c 文件几乎都不能被 clang 独立编译，必须走内核构建系统（CSiBE 自己的 Makefile 也只带完整 CFLAGS 编译其中一小部分）。ruyituner 对这种文件的设计行为就是告警并跳过（仅在全部失败时才报错），Readme 的"注意事项"里也写了这一点。
-22个文件，极个别优化率极高，大批没有优化的，平均优化率37.51%。
 
-riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/linux-2.4.23-pre3-testplatform     --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89
-C→IR 编译完成: 成功 19 个, 失败 881 个.
-19个文件，极个别优化率极高，大批没有优化的，平均优化率33.78%
+CSiBE自带脚本编译出来的文件，没有这个项目。Linux 内核的 .c 文件几乎都不能被 clang 独立编译，必须走内核构建系统（CSiBE 自己的 Makefile 也只带完整 CFLAGS 编译其中一小部分）。ruyituner 对这种文件的设计行为就是告警并跳过（仅在全部失败时才报错），Readme 的"注意事项"里也写了这一点。所以这个项目不做处理。
 
 ## 10.lwip-0.5.3.preproc
 x86:
@@ -135,7 +127,7 @@ python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llv
 22个文件都能成功，平均优化率35.74%
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project//build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io='
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io='
 22个文件都能成功，平均优化率37.47%
 
 ## 14.replaypc-0.4.0.preproc
