@@ -17,6 +17,9 @@
   只跑 x86:          追加 --only_arch x86
   只跑指定项目:      追加 --projects compiler,jpeg-6b
   只看将执行的命令:  追加 --dry_run
+
+注意: 需在项目根目录 (ruyi-tuner 主目录) 下运行; RunCSiBE.md 中的命令按项目根
+目录组织相对路径 (datasets/、--c_flags 的 -Ixxx 等), 从其它目录运行会解析错误.
 """
 
 import argparse
