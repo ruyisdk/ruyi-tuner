@@ -49,7 +49,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
 │   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出
-│   ├── extract_tuner_data.py # 辅助脚本：从运行日志抽取实际编译对比数据生成CSV/TSV
+│   ├── extract_tuner_data.py # 辅助脚本：从实际编译对比汇总文件抽取数据生成CSV/TSV
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -274,19 +274,20 @@ CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.
 
 ### 6. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
 
-从 ruyituner 的运行日志（如实际编译对比阶段的输出）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
+从实际编译对比汇总文件（`run_csibe.py` 批量运行后生成的 `output/CSiBE_Step3_summary.txt`，也兼容旧版运行日志）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
 
 - 输出列：项目名称、x86 基线大小、x86 实际编译后总大小、x86 实际代码体积缩减率、riscv 基线大小、riscv 实际编译后总大小、riscv 实际代码体积缩减率（缩减率数值带 % 号）；
 - 输出文件后缀决定列分隔符：`.tsv` 用制表符（粘贴到 Excel/WPS 时每列自动分开），其余后缀用逗号；也可用 `--delimiter` 显式指定；
-- 日志中只有项目名、没有编译结果的项目不写入输出。
+- 输入文件省略时默认读取 `output/CSiBE_Step3_summary.txt`；只有项目名、没有编译结果的项目不写入输出；
+- 输出末尾追加一行“合计”：x86 / riscv 的基线大小与实际编译后总大小列分别求和，缩减率按 (1 − 实际编译后总大小合计 / 基线大小合计) 换算为百分比（保留两位小数，基线合计为 0 时留空）。
 
 **使用演示：**
 
 ```bash
-# 生成制表符分隔的文件
-python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.tsv
-# 生成逗号分隔的 CSV
-python3 scripts/extract_tuner_data.py tuner1-9-data output/实际编译对比.csv
+# 读取默认汇总文件，生成制表符分隔的文件
+python3 scripts/extract_tuner_data.py output/实际编译对比.tsv
+# 显式指定汇总文件，生成逗号分隔的 CSV
+python3 scripts/extract_tuner_data.py output/CSiBE_Step3_summary.txt output/实际编译对比.csv
 ```
 
 ### 7. CSiBE 批量运行脚本（scripts/run_csibe.py）

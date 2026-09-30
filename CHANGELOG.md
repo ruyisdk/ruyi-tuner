@@ -135,4 +135,6 @@
 - 把实际编译对比阶段从 ruyituner.py 拆分为独立脚本 scripts/real_compile.py（与 train.py/run.py 一致，由 ruyituner.py 以子进程调用）：ruyituner.py 删除 run_real_compile_stage/real_compile_with_seq 函数，find_clang 移入 utils/common.py 供两个入口复用；输出格式不变；Readme 项目结构树与相关说明更新。
 - 更新工作流程图到V2.0版本，并且在`工作流程在实现上可以分为三个阶段`部分添加了实现和流程图的中环节的对应关系。
 - 新增 scripts/run_csibe.py 批量运行脚本：自动解析 RunCSiBE.md 中各 benchmark 的 x86/riscv 运行命令（以 `## N.项目名` 标题定项目名、`x86:`/`riscv:` 行定架构、`python3 ruyituner.py` 开头行为命令），把占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；逐个运行后从输出中截取实际编译对比阶段（阶段 3/3）的内容，按 "项目名：架构名：输出信息" 格式汇总写入 output/CSiBE_Step3_summary.txt；支持 `--only_arch` 只跑一个架构、`--projects` 指定项目、`--dry_run` 只打印将执行的命令；ruyituner.py 以 `-u` 无缓冲方式调用，避免其自身 print 因块缓冲与子脚本输出错位（此前会导致横幅/阶段标题冲到最后、污染阶段 3/3 截取）；修正 RunCSiBE.md 中 OpenTCP-1.0.4 riscv 命令 `--llvm_tools_path` 的双斜杠笔误；Readme 项目结构树与使用说明同步更新。
+- scripts/extract_tuner_data.py 输入改为实际编译对比汇总文件：默认读取 output/CSiBE_Step3_summary.txt（输入参数可省略，也兼容旧版运行日志），按 "项目名：架构名：" 段落标题定位项目与架构后抽取基线大小、实际编译后总大小与实际代码体积缩减率；输出列与分隔符规则不变；Readme 使用说明同步更新。
+- scripts/extract_tuner_data.py 输出末尾新增“合计”行：x86/riscv 的基线大小与实际编译后总大小列分别求和，缩减率按 (1 − 实际编译后总大小合计/基线大小合计) 换算为百分比（保留两位小数）；基线合计为 0 时该列留空；Readme 说明同步更新。
 
