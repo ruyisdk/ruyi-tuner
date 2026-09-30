@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工具，在目标架构的 LLVM IR 上自动搜索能够最大化缩减代码体积/提升性能的优化序列。与固定的传统优化流水线（如 -O3/-Oz）不同，RuyiTuner 通过实际运行数据、挖掘优化"协同效应"，找出一些优化组合——这些组合所产生的优化效果优于各优化单独作用之和，并以这些协同对为搜索空间、基于遗传算法搜索最优的优化序列。
+RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工具，在目标架构的 LLVM IR 上自动搜索能够最大化缩减代码体积/提升性能的优化序列。与固定的传统优化流水线（如 -O3/-Oz）不同，RuyiTuner 通过实际运行数据、挖掘优化"协同效应"，找出一些优化组合——这些组合所产生的优化效果优于各优化单独作用之和，并以这些协同对为搜索空间、基于遗传算法搜索最优的优化序列。对 C 源码项目（`--input_type c` 且 `--search_scope project`），还会用搜索到的最优序列实际编译源码（scripts/real_compile.py），输出真实编译口径下的实际编译后总大小与实际代码体积缩减率，验证优化收益。
 
 ![工作流程图](./RuyiTuner-principle-diagramV2.0.png)
 
@@ -252,7 +252,39 @@ Done: one common pass sequence for 6 files.
 [ruyituner] 已清理 IR 缓存目录: /tmp/ruyituner_ir_yy9el4vp
 ```
 
-### 4. 指令计数方式（--count_mode）
+### 4. 实际编译对比阶段（scripts/real_compile.py）
+
+实际编译对比阶段在 GA 优化之后执行：用搜索到的最优 pass 序列真正编译源码，得到真实编译口径下的代码体积缩减率，验证序列在真实编译中的收益。该阶段由 ruyituner.py 自动调用（已拆分为独立脚本 scripts/real_compile.py，与 train.py/run.py 一致，以子进程方式执行），目前仅 C 输入且项目模式下运行：
+
+- **触发条件**：经 ruyituner.py 入口运行，且 `--input_type c` 与 `--search_scope project` 同时满足；`--input_type ll` 或 file 模式不执行本阶段；
+- **输入来源**：最优 pass 序列直接读优化阶段写出的 `output/Step2_<项目名>_PassList.csv`；基线大小复用前一步写出的 `output/Step2_<项目名>_Result.json`（不重新计算）；工具链、`--c_std`、`--c_flags`、`--opt-level`、并行数等参数直接取自 ruyituner.py，源文件列表取 C→IR 阶段的基线清单；
+- **编译管线**：与评分口径一致——前端 IR 复用 C→IR 阶段生成到缓存目录的 .ll（不重复跑 clang 前端），管线为 `opt -passes=<序列> → llc pic`；个别文件 opt/llc 失败时回退 `clang -<level> -c` 直通编译（在数据集根目录下执行）。编译出的 .o 输出到 `output/<项目名>/` 目录；
+- **输出**：实际编译后总大小（全部文件 .o 的 .text 大小合计）与实际代码体积缩减率（与基线对比），并提示序列编译失败回退直通编译的文件数。
+
+**使用演示：**
+
+```bash
+# C 输入 + project 模式：训练 → GA 优化 → 实际编译对比 全流程
+python3 ruyituner.py \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2 \
+    --input_type c \
+    --search_scope project \
+    --count_mode obj-size \
+    --llvm_tools_path /llvm_dir/build/bin
+```
+
+**输出示例**（截取自 bzip2-1.0.2 的真实运行）：
+
+```text
+[ruyituner] 阶段 3/3: 实际编译对比 (项目: bzip2-1.0.2, 序列 14 个 pass)
+[ruyituner] .o 输出目录: /home/xxx/ruyi-tuner/output/bzip2-1.0.2
+============================================================
+[ruyituner] 基线大小 (来自前一步 GA 输出): 64819
+[ruyituner] 实际编译后总大小: 44601
+[ruyituner] 实际代码体积缩减率: 31.19%
+```
+
+### 5. 指令计数方式（--count_mode）
 
 train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，默认 `auto`），控制训练与优化阶段用哪种口径统计代码大小：
 
@@ -263,7 +295,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 
 四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
 
-### 5. 输入支持：LLVM IR 与 C 源码
+### 6. 输入支持：LLVM IR 与 C 源码
 
 RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
 
@@ -272,7 +304,7 @@ RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
-### 6. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
+### 7. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
 
 从实际编译对比汇总文件（`run_csibe.py` 批量运行后生成的 `output/CSiBE_Step3_summary.txt`，也兼容旧版运行日志）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
 
@@ -290,7 +322,7 @@ python3 scripts/extract_tuner_data.py output/实际编译对比.tsv
 python3 scripts/extract_tuner_data.py output/CSiBE_Step3_summary.txt output/实际编译对比.csv
 ```
 
-### 7. CSiBE 批量运行脚本（scripts/run_csibe.py）
+### 8. CSiBE 批量运行脚本（scripts/run_csibe.py）
 
 按 RunCSiBE.md 中列出的命令，用 x86 与 RISC-V 两套工具链批量运行 CSiBE 各 benchmark（project 模式），并把每个项目的实际编译对比阶段（阶段 3/3）输出汇总到一个文件。脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入 `output/CSiBE_Step3_summary.txt`（某次运行未产生该阶段时记录退出码与输出末尾）。
 
