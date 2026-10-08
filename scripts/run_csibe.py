@@ -17,6 +17,8 @@
   只跑 x86:          追加 --only_arch x86
   只跑指定项目:      追加 --projects compiler,jpeg-6b
   只看将执行的命令:  追加 --dry_run
+  统一透传优化等级:  追加 --opt-level Os --ir-opt-level Oz (追加到每条 ruyituner
+                     命令末尾; md 命令中已带同名参数时不重复追加)
 
 注意: 需在项目根目录 (ruyi-tuner 主目录) 下运行; RunCSiBE.md 中的命令按项目根
 目录组织相对路径 (datasets/、--c_flags 的 -Ixxx 等), 从其它目录运行会解析错误.
@@ -70,8 +72,16 @@ def parse_md(md_file):
     return tasks
 
 
-def build_command(task, paths):
-    """把 md 中的命令替换为实际路径, 并追加 --search_scope project."""
+def _has_flag(argv, name):
+    """argv 中是否已包含某命令行开关 (支持 "--name value" 与 "--name=value" 两种写法)."""
+    return any(a == name or a.startswith(name + '=') for a in argv)
+
+
+def build_command(task, paths, extra_args=None):
+    """把 md 中的命令替换为实际路径, 并追加 --search_scope project.
+
+    extra_args: [(开关名, 值), ...], 如 [('--opt-level', 'Os')]; 统一追加到
+    命令末尾透传给 ruyituner, md 命令中已带同名开关 (含 = 写法) 时不重复追加."""
     line = task.cmd_line
     line = line.replace(RISCV_PLACEHOLDER, paths['riscv'])
     line = line.replace(X86_PLACEHOLDER, paths['x86'])
@@ -83,6 +93,10 @@ def build_command(task, paths):
     argv = [sys.executable, '-u', RUYITUNER_PY] + argv[2:]
     if '--search_scope' not in argv:
         argv += ['--search_scope', 'project']
+    if extra_args:
+        for flag, value in extra_args:
+            if not _has_flag(argv, flag):
+                argv += [flag, value]
     return argv
 
 
@@ -151,6 +165,12 @@ def main():
                         choices=['x86', 'riscv'], help='只跑一个架构')
     parser.add_argument('--projects', type=str, default=None,
                         help='只跑指定项目, 逗号分隔 (如 compiler,jpeg-6b)')
+    parser.add_argument('--opt-level', type=str, default=None,
+                        choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
+                        help='追加到每条 ruyituner.py 命令的基线优化等级 (缺省不追加, 用 md 命令自带值)')
+    parser.add_argument('--ir-opt-level', type=str, default=None,
+                        choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
+                        help='追加到每条 ruyituner.py 命令的 C→IR 转换优化等级 (缺省不追加, 由 ruyituner 缺省规则决定)')
     parser.add_argument('--dry_run', action='store_true',
                         help='只解析并打印将执行的命令, 不实际运行')
     args = parser.parse_args()
@@ -175,11 +195,18 @@ def main():
         print('[run_csibe] 过滤后没有要运行的项目, 终止.')
         sys.exit(1)
 
+    # 透传给每条 ruyituner.py 命令的优化等级参数 (md 命令中已有同名参数时不重复追加)
+    extra_args = []
+    if args.opt_level is not None:
+        extra_args.append(('--opt-level', args.opt_level))
+    if args.ir_opt_level is not None:
+        extra_args.append(('--ir-opt-level', args.ir_opt_level))
+
     print(f'[run_csibe] 共 {len(tasks)} 条命令 (项目数: {len({t.project for t in tasks})})')
     if args.dry_run:
         for t in tasks:
             print(f'  {t.project} ({t.arch}):',
-                  ' '.join(shlex.quote(a) for a in build_command(t, paths)))
+                  ' '.join(shlex.quote(a) for a in build_command(t, paths, extra_args)))
         print(f'[run_csibe] 汇总将写入: {args.output}')
         sys.exit(0)
 
@@ -193,7 +220,7 @@ def main():
         out_fh.write(f'# riscv 工具链: {args.riscv_path}\n\n')
         out_fh.flush()
         for t in tasks:
-            run_task(t, build_command(t, paths), out_fh)
+            run_task(t, build_command(t, paths, extra_args), out_fh)
     print(f'[run_csibe] 全部完成, 汇总已写入: {args.output}')
 
 

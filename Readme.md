@@ -325,7 +325,7 @@ python3 scripts/extract_tuner_data.py output/CSiBE_Step3_summary.txt output/实�
 
 ### 8. CSiBE 批量运行脚本（scripts/run_csibe.py）
 
-按 RunCSiBE.md 中列出的命令，用 x86 与 RISC-V 两套工具链批量运行 CSiBE 各 benchmark（project 模式），并把每个项目的实际编译对比阶段（阶段 3/3）输出汇总到一个文件。脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入 `output/CSiBE_Step3_summary.txt`（某次运行未产生该阶段时记录退出码与输出末尾）。
+按 RunCSiBE.md 中列出的命令，用 x86 与 RISC-V 两套工具链批量运行 CSiBE 各 benchmark（project 模式），并把每个项目的实际编译对比阶段（阶段 3/3）输出汇总到一个文件。脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入 `output/CSiBE_Step3_summary.txt`（某次运行未产生该阶段时记录退出码与输出末尾）。
 
 **注意**：该脚本需在 ruyi-tuner 项目根目录（主目录）下运行；RunCSiBE.md 中的命令按项目根目录组织相对路径（`datasets/...`、`--c_flags` 的 `-Ixxx` 等），从其它目录运行会导致数据集路径等解析错误。
 

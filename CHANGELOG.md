@@ -142,4 +142,5 @@
 - 新增 --ir-opt-level 参数（ruyituner.py，可选，缺省与 --opt-level 一致）：控制 C 输入（--input_type c）时 clang 把 .c/.i 编译为 .ll 所用的优化等级（clang -<level> -S -emit-llvm），仅 C→IR 转换环节生效，GA 基线评分与实际编译对比仍使用 --opt-level；ruyituner.py 提示行/帮助文本与 Readme 参数说明、输入支持小节同步更新。
 - 实际编译对比阶段的输出信息更新：基线行改为 "clang -<优化等级> 基线大小 (来自前一步 GA 输出)"、优化后行改为 "按优化序列实际编译后总大小"（scripts/real_compile.py）；scripts/extract_tuner_data.py 的解析正则同步兼容新旧两种标签；Readme 输出示例与相关说明同步更新。
 - 实际编译对比阶段的回退编译等级改为 --ir-opt-level：序列在某文件 opt/llc 失败时回退 `clang -<ir-opt-level> -c` 直通编译（与 C→IR 转换的优化等级一致，缺省仍与 --opt-level 相同），不再使用基线优化等级 --opt-level；scripts/real_compile.py 新增 --ir_opt_level 参数（ruyituner.py 透传；--opt_level 仅用于基线标签显示），Readme 相关说明同步更新。
+- scripts/run_csibe.py 新增 --opt-level/--ir-opt-level 参数（可选，缺省不追加）：把基线优化等级与 C→IR 转换优化等级统一透传到每条 ruyituner.py 命令末尾（md 命令中已带同名参数时不重复追加）；Readme 批量运行脚本小节同步更新。
 
