@@ -36,8 +36,8 @@ PROJECT_RE = re.compile(r'^(\d+)\.\s*(.+)$')
 # 旧日志格式的架构行: "x86" / "riscv"
 ARCH_RE = re.compile(r'^(x86|riscv)\s*[:：]?$')
 METRIC_RE = re.compile(
-    r'^\[ruyituner\] (基线大小 .+): (\d+)$'
-    r'|^\[ruyituner\] (实际编译后总大小): (\d+)$'
+    r'^\[ruyituner\] (?:clang -\S+ )?(基线大小 .+): (\d+)$'
+    r'|^\[ruyituner\] (按优化序列实际编译后总大小|实际编译后总大小): (\d+)$'
     r'|^\[ruyituner\] (实际代码体积缩减率): ([\d.]+)%$'
 )
 

@@ -139,4 +139,7 @@
 - scripts/extract_tuner_data.py 输出末尾新增“合计”行：x86/riscv 的基线大小与实际编译后总大小列分别求和，缩减率按 (1 − 实际编译后总大小合计/基线大小合计) 换算为百分比（保留两位小数）；基线合计为 0 时该列留空；Readme 说明同步更新。
 - 明确 scripts/run_csibe.py 需在项目根目录下运行：RunCSiBE.md 中的命令按项目根目录组织相对路径（datasets/、--c_flags 的 -Ixxx 等），从其它目录运行会解析错误；Readme 使用说明与脚本顶部文档同步补充该说明。
 - Readme 补充实际编译环节介绍：项目简介的总体介绍中增加"对 C 源码项目用最优序列实际编译并输出真实口径缩减率"的说明；详细说明新增"实际编译对比阶段（scripts/real_compile.py）"小节（触发条件、输入来源、编译管线、输出说明，附使用演示与 bzip2-1.0.2 真实输出示例），原第 4~7 小节顺延为第 5~8 小节。
+- 新增 --ir-opt-level 参数（ruyituner.py，可选，缺省与 --opt-level 一致）：控制 C 输入（--input_type c）时 clang 把 .c/.i 编译为 .ll 所用的优化等级（clang -<level> -S -emit-llvm），仅 C→IR 转换环节生效，GA 基线评分与实际编译对比仍使用 --opt-level；ruyituner.py 提示行/帮助文本与 Readme 参数说明、输入支持小节同步更新。
+- 实际编译对比阶段的输出信息更新：基线行改为 "clang -<优化等级> 基线大小 (来自前一步 GA 输出)"、优化后行改为 "按优化序列实际编译后总大小"（scripts/real_compile.py）；scripts/extract_tuner_data.py 的解析正则同步兼容新旧两种标签；Readme 输出示例与相关说明同步更新。
+- 实际编译对比阶段的回退编译等级改为 --ir-opt-level：序列在某文件 opt/llc 失败时回退 `clang -<ir-opt-level> -c` 直通编译（与 C→IR 转换的优化等级一致，缺省仍与 --opt-level 相同），不再使用基线优化等级 --opt-level；scripts/real_compile.py 新增 --ir_opt_level 参数（ruyituner.py 透传；--opt_level 仅用于基线标签显示），Readme 相关说明同步更新。
 
