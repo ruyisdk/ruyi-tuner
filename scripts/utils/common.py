@@ -217,11 +217,12 @@ def get_inst_count_method(llvm_tools_path=None, count_mode='auto'):
 def get_opt_default_arch(opt_path):
     '''从 `opt --version` 输出中提取默认目标架构 (target triple 的第一段).
 
-    构建时未设置默认目标 (如通用构建) 时返回 None.'''
+    构建时未设置默认目标 (如通用构建) 时返回 None; 只匹配同一行的空格/制表符,
+    避免默认目标为空时跨行误取下一行 "Host CPU" 的 "Host".'''
     r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
     if r.returncode != 0:
         return None
-    m = re.search(r'Default target:\s*(\S*)', r.stdout + r.stderr)
+    m = re.search(r'Default target:[ \t]*(\S+)', r.stdout + r.stderr)
     if not m or not m.group(1):
         return None
     return m.group(1).split('-', 1)[0]
