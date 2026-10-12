@@ -4,12 +4,13 @@
 
 功能:
     解析实际编译对比汇总文件 (如批量运行后生成的 output/CSiBE_Step3_summary.txt,
-    也兼容旧的 ruyituner 运行日志), 按项目抽取 x86 / riscv 两种架构的
+    也兼容旧的 ruyituner 运行日志), 按项目抽取 x86 / riscv / aarch64 三种架构的
     基线大小、实际编译后总大小、实际代码体积缩减率, 输出为表格文件.
 
 输出列:
     项目名称 | x86基线大小 | x86实际编译后总大小 | x86实际代码体积缩减率
              | riscv基线大小 | riscv实际编译后总大小 | riscv实际代码体积缩减率
+             | aarch64基线大小 | aarch64实际编译后总大小 | aarch64实际代码体积缩减率
 
 用法:
     python3 scripts/extract_tuner_data.py [<输入汇总文件>] <输出文件>
@@ -29,12 +30,12 @@ import argparse
 import csv
 import re
 
-# 汇总文件段落标题: "项目名：x86：" / "项目名：riscv："
-SECTION_RE = re.compile(r'^(.+?)[：:]\s*(x86|riscv)[：:]?\s*$')
+# 汇总文件段落标题: "项目名：x86：" / "项目名：riscv：" / "项目名：aarch64："
+SECTION_RE = re.compile(r'^(.+?)[：:]\s*(x86|riscv|aarch64)[：:]?\s*$')
 # 旧日志格式的项目行: "1. 项目名"
 PROJECT_RE = re.compile(r'^(\d+)\.\s*(.+)$')
-# 旧日志格式的架构行: "x86" / "riscv"
-ARCH_RE = re.compile(r'^(x86|riscv)\s*[:：]?$')
+# 旧日志格式的架构行: "x86" / "riscv" / "aarch64"
+ARCH_RE = re.compile(r'^(x86|riscv|aarch64)\s*[:：]?$')
 METRIC_RE = re.compile(
     r'^\[ruyituner\] (?:clang -\S+ )?(基线大小 .+): (\d+)$'
     r'|^\[ruyituner\] (按优化序列实际编译后总大小|实际编译后总大小): (\d+)$'
@@ -123,8 +124,9 @@ def main():
         '项目名称',
         'x86基线大小', 'x86实际编译后总大小', 'x86实际代码体积缩减率(%)',
         'riscv基线大小', 'riscv实际编译后总大小', 'riscv实际代码体积缩减率(%)',
+        'aarch64基线大小', 'aarch64实际编译后总大小', 'aarch64实际代码体积缩减率(%)',
     ]
-    sums = {arch: {'baseline': 0, 'actual': 0} for arch in ('x86', 'riscv')}
+    sums = {arch: {'baseline': 0, 'actual': 0} for arch in ('x86', 'riscv', 'aarch64')}
 
     def fmt_red(d):
         # 缩减率带上 % 号
@@ -143,8 +145,9 @@ def main():
         for name, data in projects:
             x86 = data.get('x86', {})
             riscv = data.get('riscv', {})
+            aarch64 = data.get('aarch64', {})
             # 累加合计行所需的各列总和
-            for arch, d in (('x86', x86), ('riscv', riscv)):
+            for arch, d in (('x86', x86), ('riscv', riscv), ('aarch64', aarch64)):
                 sums[arch]['baseline'] += int(d.get('baseline') or 0)
                 sums[arch]['actual'] += int(d.get('actual') or 0)
             w.writerow([
@@ -153,12 +156,15 @@ def main():
                 fmt_red(x86),
                 riscv.get('baseline', ''), riscv.get('actual', ''),
                 fmt_red(riscv),
+                aarch64.get('baseline', ''), aarch64.get('actual', ''),
+                fmt_red(aarch64),
             ])
         # 末尾追加合计行
         w.writerow([
             '合计',
             sums['x86']['baseline'], sums['x86']['actual'], total_red('x86'),
             sums['riscv']['baseline'], sums['riscv']['actual'], total_red('riscv'),
+            sums['aarch64']['baseline'], sums['aarch64']['actual'], total_red('aarch64'),
         ])
     print(f'共 {len(projects)} 个项目, 已写入 {args.output}')
 

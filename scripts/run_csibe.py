@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-批量运行 RunCSiBE.md 中列出的各 CSiBE 项目 (x86 与 RISC-V 两套工具链).
+批量运行 RunCSiBE.md 中列出的各 CSiBE 项目 (x86 / RISC-V / AArch64 三套工具链).
 
 从 RunCSiBE.md 解析每个项目的命令: 以 "## N.项目名" 标题确定项目名, 以紧邻的
-"x86:" / "riscv:" 行确定架构, 以 "python3 ruyituner.py" 开头的行作为命令.
-把命令中的占位工具链路径 (/home/XXX/llvm-project/build-x86|riscv/bin) 替换为
-实际路径, /home/XXX/ruyi-tuner 替换为本项目根目录, 并在末尾追加
---search_scope project 后逐个运行; 每个项目跑完后, 从输出中截取实际编译对比
-阶段 (阶段 3/3) 的部分, 按 "项目名：架构名：输出信息" 格式写入汇总文件.
+"x86:" / "riscv:" / "aarch64:" 行确定架构, 以 "python3 ruyituner.py" 开头的
+行作为命令. 把命令中的占位工具链路径 (/home/XXX/llvm-project/build-x86|riscv|
+aarch64/bin) 替换为实际路径, /home/XXX/ruyi-tuner 替换为本项目根目录后逐个
+运行 (md 命令均已自带 --search_scope project); 每个项目跑完后, 从输出中截取
+实际编译对比阶段 (阶段 3/3) 的部分, 按 "项目名：架构名：输出信息" 格式写入
+汇总文件.
 
 用法示例:
   python3 scripts/run_csibe.py --x86_path /home/xxx/llvm-project/build-x86/bin \
-      --riscv_path /home/xxx/llvm-project/build-riscv/bin
+      --riscv_path /home/xxx/llvm-project/build-riscv/bin \
+      --aarch64_path /home/xxx/llvm-project/build-aarch64/bin
 
   只跑 x86:          追加 --only_arch x86
   只跑指定项目:      追加 --projects compiler,jpeg-6b
@@ -41,10 +43,11 @@ DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, 'output', 'CSiBE_Step3_summary.txt')
 # md 中的占位路径 -> 实际路径
 X86_PLACEHOLDER = '/home/XXX/llvm-project/build-x86/bin'
 RISCV_PLACEHOLDER = '/home/XXX/llvm-project/build-riscv/bin'
+AARCH64_PLACEHOLDER = '/home/XXX/llvm-project/build-aarch64/bin'
 RUYITUNER_PLACEHOLDER = '/home/XXX/ruyi-tuner'
 
 HEADING_RE = re.compile(r'^##\s*\d+\.\s*(\S+)')
-ARCH_RE = re.compile(r'^(x86|riscv)\s*[:：]\s*$')
+ARCH_RE = re.compile(r'^(x86|riscv|aarch64)\s*[:：]\s*$')
 CMD_RE = re.compile(r'^python3\s+ruyituner\.py\b')
 
 Task = namedtuple('Task', ['project', 'arch', 'cmd_line'])
@@ -78,11 +81,12 @@ def _has_flag(argv, name):
 
 
 def build_command(task, paths, extra_args=None):
-    """把 md 中的命令替换为实际路径, 并追加 --search_scope project.
+    """把 md 中的命令替换为实际路径 (md 命令均已自带 --search_scope project).
 
     extra_args: [(开关名, 值), ...], 如 [('--opt-level', 'Os')]; 统一追加到
     命令末尾透传给 ruyituner, md 命令中已带同名开关 (含 = 写法) 时不重复追加."""
     line = task.cmd_line
+    line = line.replace(AARCH64_PLACEHOLDER, paths['aarch64'])
     line = line.replace(RISCV_PLACEHOLDER, paths['riscv'])
     line = line.replace(X86_PLACEHOLDER, paths['x86'])
     line = line.replace(RUYITUNER_PLACEHOLDER, PROJECT_ROOT)
@@ -91,8 +95,6 @@ def build_command(task, paths, extra_args=None):
     # -u 使 ruyituner 自身的 print 不缓冲: 其 stdout 接入管道时默认块缓冲,
     # 横幅/阶段标题会积到退出才冲出, 与子脚本输出错位, 必须去掉
     argv = [sys.executable, '-u', RUYITUNER_PY] + argv[2:]
-    if '--search_scope' not in argv:
-        argv += ['--search_scope', 'project']
     if extra_args:
         for flag, value in extra_args:
             if not _has_flag(argv, flag):
@@ -157,12 +159,14 @@ def main():
                         help='x86 工具链目录 (替换 md 中的 build-x86 路径)')
     parser.add_argument('--riscv_path', type=str, default=None,
                         help='RISC-V 工具链目录 (替换 md 中的 build-riscv 路径)')
+    parser.add_argument('--aarch64_path', type=str, default=None,
+                        help='AArch64 工具链目录 (替换 md 中的 build-aarch64 路径)')
     parser.add_argument('--md_file', type=str, default=DEFAULT_MD,
                         help=f'RunCSiBE.md 路径 (默认: {DEFAULT_MD})')
     parser.add_argument('--output', type=str, default=DEFAULT_OUTPUT,
                         help=f'汇总输出文件 (默认: {DEFAULT_OUTPUT})')
     parser.add_argument('--only_arch', type=str, default=None,
-                        choices=['x86', 'riscv'], help='只跑一个架构')
+                        choices=['x86', 'riscv', 'aarch64'], help='只跑一个架构')
     parser.add_argument('--projects', type=str, default=None,
                         help='只跑指定项目, 逗号分隔 (如 compiler,jpeg-6b)')
     parser.add_argument('--opt-level', type=str, default=None,
@@ -175,8 +179,9 @@ def main():
                         help='只解析并打印将执行的命令, 不实际运行')
     args = parser.parse_args()
 
-    archs = [args.only_arch] if args.only_arch else ['x86', 'riscv']
-    paths = {'x86': args.x86_path, 'riscv': args.riscv_path}
+    archs = [args.only_arch] if args.only_arch else ['x86', 'riscv', 'aarch64']
+    paths = {'x86': args.x86_path, 'riscv': args.riscv_path,
+             'aarch64': args.aarch64_path}
     for arch in archs:
         if not paths[arch]:
             parser.error(f'缺少 {arch} 工具链路径 (--{arch}_path)')
@@ -217,7 +222,8 @@ def main():
         out_fh.write('# CSiBE 各项目 ruyituner 输出 阶段 3/3 (实际编译对比) 汇总\n')
         out_fh.write(f'# 生成时间: {time.strftime("%Y-%m-%d %H:%M:%S")}\n')
         out_fh.write(f'# x86 工具链: {args.x86_path}\n')
-        out_fh.write(f'# riscv 工具链: {args.riscv_path}\n\n')
+        out_fh.write(f'# riscv 工具链: {args.riscv_path}\n')
+        out_fh.write(f'# aarch64 工具链: {args.aarch64_path}\n\n')
         out_fh.flush()
         for t in tasks:
             run_task(t, build_command(t, paths, extra_args), out_fh)
