@@ -144,4 +144,7 @@
 - 实际编译对比阶段的回退编译等级改为 --ir-opt-level：序列在某文件 opt/llc 失败时回退 `clang -<ir-opt-level> -c` 直通编译（与 C→IR 转换的优化等级一致，缺省仍与 --opt-level 相同），不再使用基线优化等级 --opt-level；scripts/real_compile.py 新增 --ir_opt_level 参数（ruyituner.py 透传；--opt_level 仅用于基线标签显示），Readme 相关说明同步更新。
 - scripts/run_csibe.py 新增 --opt-level/--ir-opt-level 参数（可选，缺省不追加）：把基线优化等级与 C→IR 转换优化等级统一透传到每条 ruyituner.py 命令末尾（md 命令中已带同名参数时不重复追加）；Readme 批量运行脚本小节同步更新。
 - 修复 utils/common.py 中 get_opt_default_arch 的正则跨行误匹配：默认目标为空的 opt 构建（如仅编 ARM 系后端的交叉工具链 build-aarch64-22.1.0，clang 默认 triple 为 unknown）会把下一行 "Host CPU" 的 "Host" 误当默认目标架构，导致架构一致性校验误报 "IR 目标架构 aarch64 与 opt 默认目标 Host 不一致"；改为只匹配同一行的空格/制表符，默认目标为空时正确返回 None 并跳过校验；已用该工具链配合 --c_flags '--target=aarch64-unknown-linux-gnu' 跑通 bzip2-1.0.2 全流程（整体缩减率 21.33%）。
+- RunCSiBE.md 全面更新：所有命令改为 project 模式（每条命令末尾都带 --search_scope project，开头说明相应改为 project 模式口径）；为全部项目新增 aarch64 架构命令（使用 build-aarch64 工具链并在 --c_flags 中显式加 --target=aarch64-unknown-linux-gnu，工具链说明更新为 x86/RISC-V/AArch64）；删除各项目实测的平均优化率行与 "--count_mode obj-size 与 --input_type c" 说明段；libmspack 命令删去多余的 -I mspack 路径（所有头文件与被编译的 .c 同目录，引号形式 include 无需额外包含路径），并统一清理命令行的多余空格与行尾空格。
+- scripts/run_csibe.py 新增 aarch64 支持：新增 --aarch64_path 参数、/home/XXX/llvm-project/build-aarch64/bin 占位路径替换与 aarch64 架构行解析，默认三套架构全跑（--only_arch 可选值同步增加 aarch64），汇总文件头写入 aarch64 工具链信息；同时去掉命令末尾自动追加 --search_scope project 的逻辑（RunCSiBE.md 命令已自带该参数）。
+- scripts/extract_tuner_data.py 新增 aarch64 列：段落标题与旧日志架构行的解析正则支持 aarch64，输出表头、数据行与合计行在 riscv 之后增加 aarch64 基线大小、实际编译后总大小与实际代码体积缩减率三列，合计行缩减率计算口径与 x86/riscv 一致。
 
