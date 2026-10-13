@@ -9,7 +9,8 @@
 aarch64/bin) 替换为实际路径, /home/XXX/ruyi-tuner 替换为本项目根目录后逐个
 运行 (md 命令均已自带 --search_scope project); 每个项目跑完后, 从输出中截取
 实际编译对比阶段 (阶段 3/3) 的部分, 按 "项目名：架构名：输出信息" 格式写入
-汇总文件.
+汇总文件; 全部项目跑完后, 再从汇总文件中抽取各架构的基线大小/实际编译后
+总大小/缩减率生成 TSV 数据表格 (原 scripts/extract_tuner_data.py 的功能).
 
 用法示例:
   python3 scripts/run_csibe.py --x86_path /home/xxx/llvm-project/build-x86/bin \
@@ -27,6 +28,7 @@ aarch64/bin) 替换为实际路径, /home/XXX/ruyi-tuner 替换为本项目根�
 """
 
 import argparse
+import csv
 import os
 import re
 import shlex
@@ -39,6 +41,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUYITUNER_PY = os.path.join(PROJECT_ROOT, 'ruyituner.py')
 DEFAULT_MD = os.path.join(PROJECT_ROOT, 'RunCSiBE.md')
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, 'output', 'CSiBE_Step3_summary.txt')
+DEFAULT_DATA_OUTPUT = os.path.join(PROJECT_ROOT, 'output', 'CSiBE_data_summary.tsv')
 
 # md 中的占位路径 -> 实际路径
 X86_PLACEHOLDER = '/home/XXX/llvm-project/build-x86/bin'
@@ -149,6 +152,130 @@ def run_task(task, argv, out_fh):
     return rc
 
 
+# ---- 从汇总文件抽取数据生成表格 (合并自 scripts/extract_tuner_data.py) ----
+
+# 汇总文件段落标题: "项目名：x86：" / "项目名：riscv：" / "项目名：aarch64："
+SECTION_RE = re.compile(r'^(.+?)[：:]\s*(x86|riscv|aarch64)[：:]?\s*$')
+# 旧日志格式的项目行: "1. 项目名"
+PROJECT_RE = re.compile(r'^(\d+)\.\s*(.+)$')
+# 旧日志格式的架构行: "x86" / "riscv" / "aarch64"
+ARCH_LINE_RE = re.compile(r'^(x86|riscv|aarch64)\s*[:：]?$')
+METRIC_RE = re.compile(
+    r'^\[ruyituner\] (?:clang -\S+ )?(基线大小 .+): (\d+)$'
+    r'|^\[ruyituner\] (按优化序列实际编译后总大小|实际编译后总大小): (\d+)$'
+    r'|^\[ruyituner\] (实际代码体积缩减率): ([\d.]+)%$'
+)
+METRIC_KEYS = {
+    '基线大小 (来自前一步 GA 输出)': 'baseline',
+    '实际编译后总大小': 'actual',
+    '实际代码体积缩减率': 'reduction',
+}
+
+
+def parse_summary(path):
+    """从汇总文件中抽取各项目 x86/riscv/aarch64 的基线大小、实际编译后
+    总大小与实际代码体积缩减率, 返回 [(项目名, {架构: {metric: value}}), ...],
+    项目顺序与首次出现顺序一致; 兼容旧版运行日志格式."""
+    order = []
+    data = {}
+    cur_name = None
+    cur_arch = None
+
+    def ensure(name, arch=None):
+        if name not in data:
+            data[name] = {}
+            order.append(name)
+        if arch is None:
+            return data[name]
+        return data[name].setdefault(arch, {})
+
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            m = SECTION_RE.match(line)
+            if m:
+                cur_name, cur_arch = m.group(1), m.group(2)
+                ensure(cur_name, cur_arch)
+                continue
+            m = PROJECT_RE.match(line)
+            if m:
+                cur_name = m.group(2)
+                cur_arch = None
+                ensure(cur_name)
+                continue
+            m = ARCH_LINE_RE.match(line)
+            if m:
+                cur_arch = m.group(1)
+                if cur_name is not None:
+                    ensure(cur_name, cur_arch)
+                continue
+            m = METRIC_RE.match(line)
+            if m:
+                if m.group(1) is not None:
+                    key = METRIC_KEYS['基线大小 (来自前一步 GA 输出)']
+                    value = int(m.group(2))
+                elif m.group(3) is not None:
+                    key = METRIC_KEYS['实际编译后总大小']
+                    value = int(m.group(4))
+                else:
+                    key = METRIC_KEYS['实际代码体积缩减率']
+                    value = m.group(6)
+                if cur_name is None or cur_arch is None:
+                    continue
+                ensure(cur_name, cur_arch)[key] = value
+    return [(name, data[name]) for name in order]
+
+
+def write_data_table(records, out_path):
+    """把 parse_summary 的结果写成制表符分隔的数据表格 (含表头与合计行).
+
+    列为 项目名称 + x86/riscv/aarch64 各三列 (基线大小/实际编译后总大小/
+    实际代码体积缩减率); 缩减率带 % 号; 合计行各架构分别求和, 缩减率按
+    (1 − 实际编译后总大小合计/基线大小合计) 换算 (基线合计为 0 时留空)."""
+    header = [
+        '项目名称',
+        'x86基线大小', 'x86实际编译后总大小', 'x86实际代码体积缩减率(%)',
+        'riscv基线大小', 'riscv实际编译后总大小', 'riscv实际代码体积缩减率(%)',
+        'aarch64基线大小', 'aarch64实际编译后总大小', 'aarch64实际代码体积缩减率(%)',
+    ]
+    sums = {arch: {'baseline': 0, 'actual': 0} for arch in ('x86', 'riscv', 'aarch64')}
+
+    def fmt_red(d):
+        v = d.get('reduction', '')
+        return f'{v}%' if v != '' else ''
+
+    def total_red(arch):
+        if sums[arch]['baseline'] == 0:
+            return ''
+        return f"{(1 - sums[arch]['actual'] / sums[arch]['baseline']) * 100:.2f}%"
+
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f, delimiter='\t')
+        w.writerow(header)
+        for name, data in records:
+            x86 = data.get('x86', {})
+            riscv = data.get('riscv', {})
+            aarch64 = data.get('aarch64', {})
+            for arch, d in (('x86', x86), ('riscv', riscv), ('aarch64', aarch64)):
+                sums[arch]['baseline'] += int(d.get('baseline') or 0)
+                sums[arch]['actual'] += int(d.get('actual') or 0)
+            w.writerow([
+                name,
+                x86.get('baseline', ''), x86.get('actual', ''), fmt_red(x86),
+                riscv.get('baseline', ''), riscv.get('actual', ''), fmt_red(riscv),
+                aarch64.get('baseline', ''), aarch64.get('actual', ''), fmt_red(aarch64),
+            ])
+        w.writerow([
+            '合计',
+            sums['x86']['baseline'], sums['x86']['actual'], total_red('x86'),
+            sums['riscv']['baseline'], sums['riscv']['actual'], total_red('riscv'),
+            sums['aarch64']['baseline'], sums['aarch64']['actual'], total_red('aarch64'),
+        ])
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='批量运行 RunCSiBE.md 中各 CSiBE 项目并汇总阶段 3/3 输出',
@@ -163,6 +290,8 @@ def main():
                         help=f'RunCSiBE.md 路径 (默认: {DEFAULT_MD})')
     parser.add_argument('--output', type=str, default=DEFAULT_OUTPUT,
                         help=f'汇总输出文件 (默认: {DEFAULT_OUTPUT})')
+    parser.add_argument('--data_output', type=str, default=DEFAULT_DATA_OUTPUT,
+                        help=f'数据表格输出文件 (TSV, 默认: {DEFAULT_DATA_OUTPUT})')
     parser.add_argument('--only_arch', type=str, default=None,
                         choices=['x86', 'riscv', 'aarch64'], help='只跑一个架构')
     parser.add_argument('--projects', type=str, default=None,
@@ -211,6 +340,7 @@ def main():
             print(f'  {t.project} ({t.arch}):',
                   ' '.join(shlex.quote(a) for a in build_command(t, paths, extra_args)))
         print(f'[run_csibe] 汇总将写入: {args.output}')
+        print(f'[run_csibe] 数据表格将写入: {args.data_output}')
         sys.exit(0)
 
     out_dir = os.path.dirname(args.output)
@@ -226,6 +356,11 @@ def main():
         for t in tasks:
             run_task(t, build_command(t, paths, extra_args), out_fh)
     print(f'[run_csibe] 全部完成, 汇总已写入: {args.output}')
+
+    # 从汇总文件中抽取数据生成表格 (原 scripts/extract_tuner_data.py 的功能)
+    records = parse_summary(args.output)
+    write_data_table(records, args.data_output)
+    print(f'[run_csibe] 共 {len(records)} 个项目, 数据表格已写入: {args.data_output}')
 
 
 if __name__ == '__main__':

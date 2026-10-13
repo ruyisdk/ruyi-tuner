@@ -149,4 +149,5 @@
 - scripts/extract_tuner_data.py 新增 aarch64 列：段落标题与旧日志架构行的解析正则支持 aarch64，输出表头、数据行与合计行在 riscv 之后增加 aarch64 基线大小、实际编译后总大小与实际代码体积缩减率三列，合计行缩减率计算口径与 x86/riscv 一致。
 - scripts/run_csibe.py 去掉任务结束后的阶段 3/3 重印块：此前 ruyituner 输出的阶段 3/3 先实时回显一遍，任务结束后又由 run_csibe 以 `[run_csibe] ------------ 阶段 3/3 输出 ------------` 标题重印一遍，终端上同一内容出现两次；现在仅保留实时回显（内容照旧写入汇总文件），未截取到阶段 3/3 时改为打印一行警告提示。
 - 输出命名新增架构后缀：项目输出名改为“项目名_架构名”（架构取自数据集 .ll 内嵌 target triple，归一为 x86/riscv/aarch64；项目名已含架构名或取不到架构时保持原名），Step1 协同对枚举文件、Step2 Pass 列表/结果 json 与实际编译对比的 .o 输出目录（output/<项目名>_<架构>/）均随之区分架构，不同架构多次运行时数据不再互相覆盖；utils/common.py 新增 dataset_arch_name 函数，ruyituner.py 据此计算项目输出名并统一透传给 train.py/run.py/real_compile.py 的 --project_name；Readme 相关命名说明与输出示例同步更新，项目结构树的 output 条目补充 Step2 文件、.o 输出目录、CSiBE 汇总与数据表格等各阶段输出说明，工作流程的训练阶段与优化阶段说明也补充了各自输出产物。
+- scripts/extract_tuner_data.py 合并进 scripts/run_csibe.py：批量运行全部项目后自动从汇总文件中抽取各架构数据并生成制表符分隔的数据表格 output/CSiBE_data_summary.tsv（新增 --data_output 参数，默认名如前述；列为项目名称 + x86/riscv/aarch64 各三列并带合计行，口径与原脚本一致）；原独立脚本删除，Readme 删除“数据抽取辅助脚本”小节，批量运行脚本小节的说明、使用演示与参数列表相应更新（含三套工具链与 --data_output）。
 

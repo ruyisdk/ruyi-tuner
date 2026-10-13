@@ -41,7 +41,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── Step2_<项目名>_<架构>_Result.json          # 优化阶段(project模式): 基线/优化后大小与整体缩减率
 │   ├── <项目名>_<架构>/                           # 实际编译对比阶段: 按最优序列实际编译出的 .o 文件
 │   ├── CSiBE_Step3_summary.txt                    # run_csibe.py 批量运行后各项目阶段3/3输出的汇总
-│   └── *.tsv / *.csv                              # extract_tuner_data.py 从汇总文件抽取的数据表格(命名自定)
+│   └── CSiBE_data_summary.tsv                     # run_csibe.py 批量运行后自动生成的数据表格(各架构基线/实际编译后总大小/缩减率)
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -53,8 +53,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
-│   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出
-│   ├── extract_tuner_data.py # 辅助脚本：从实际编译对比汇总文件抽取数据生成CSV/TSV
+│   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出, 并生成数据表格
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -310,42 +309,28 @@ RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
-### 7. 数据抽取辅助脚本（scripts/extract_tuner_data.py）
+### 7. CSiBE 批量运行脚本（scripts/run_csibe.py）
 
-从实际编译对比汇总文件（`run_csibe.py` 批量运行后生成的 `output/CSiBE_Step3_summary.txt`，也兼容旧版运行日志）中抽取各项目在 x86 / RISC-V 两种架构下的编译体积对比数据，输出为表格文件（CSV/TSV）：
+按 RunCSiBE.md 中列出的命令，用 x86 / RISC-V / AArch64 三套工具链批量运行 CSiBE 各 benchmark（project 模式），并生成两个输出文件：`output/CSiBE_Step3_summary.txt` 汇总每个项目的实际编译对比阶段（阶段 3/3）输出；全部项目跑完后自动从该汇总中抽取各架构的基线大小、实际编译后总大小与实际代码体积缩减率，生成制表符分隔的数据表格 `output/CSiBE_data_summary.tsv`（表格功能为原 scripts/extract_tuner_data.py 合并而来）。
 
-- 输出列：项目名称、x86 基线大小、x86 实际编译后总大小、x86 实际代码体积缩减率、riscv 基线大小、riscv 实际编译后总大小、riscv 实际代码体积缩减率（缩减率数值带 % 号）；
-- 输出文件后缀决定列分隔符：`.tsv` 用制表符（粘贴到 Excel/WPS 时每列自动分开），其余后缀用逗号；也可用 `--delimiter` 显式指定；
-- 输入文件省略时默认读取 `output/CSiBE_Step3_summary.txt`；只有项目名、没有编译结果的项目不写入输出；
-- 输出末尾追加一行“合计”：x86 / riscv 的基线大小与实际编译后总大小列分别求和，缩减率按 (1 − 实际编译后总大小合计 / 基线大小合计) 换算为百分比（保留两位小数，基线合计为 0 时留空）。
+脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:`/`aarch64:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path`/`--aarch64_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录（md 命令均已自带 `--search_scope project`）；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入汇总文件（某次运行未产生该阶段时记录退出码与输出末尾）。
 
-**使用演示：**
-
-```bash
-# 读取默认汇总文件，生成制表符分隔的文件
-python3 scripts/extract_tuner_data.py output/实际编译对比.tsv
-# 显式指定汇总文件，生成逗号分隔的 CSV
-python3 scripts/extract_tuner_data.py output/CSiBE_Step3_summary.txt output/实际编译对比.csv
-```
-
-### 8. CSiBE 批量运行脚本（scripts/run_csibe.py）
-
-按 RunCSiBE.md 中列出的命令，用 x86 与 RISC-V 两套工具链批量运行 CSiBE 各 benchmark（project 模式），并把每个项目的实际编译对比阶段（阶段 3/3）输出汇总到一个文件。脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录，并在每条命令末尾自动追加 `--search_scope project`；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入 `output/CSiBE_Step3_summary.txt`（某次运行未产生该阶段时记录退出码与输出末尾）。
+数据表格 `CSiBE_data_summary.tsv` 的列：项目名称 + x86/riscv/aarch64 各三列（基线大小、实际编译后总大小、实际代码体积缩减率，缩减率带 % 号）；末尾追加“合计”行，各架构分别求和，缩减率按 (1 − 实际编译后总大小合计 / 基线大小合计) 换算（保留两位小数，基线合计为 0 时留空）；汇总文件中只有项目名、没有编译结果的项目不写入。
 
 **注意**：该脚本需在 ruyi-tuner 项目根目录（主目录）下运行；RunCSiBE.md 中的命令按项目根目录组织相对路径（`datasets/...`、`--c_flags` 的 `-Ixxx` 等），从其它目录运行会导致数据集路径等解析错误。
 
 **使用演示：**
 
 ```bash
-# 用两套工具链批量运行 RunCSiBE.md 中的全部项目
+# 用三套工具链批量运行 RunCSiBE.md 中的全部项目（自动生成汇总 txt 与数据表格 tsv）
 python3 scripts/run_csibe.py \
     --x86_path /llvm_dir/build-x86/bin \
-    --riscv_path /llvm_dir/build-riscv/bin
+    --riscv_path /llvm_dir/build-riscv/bin \
+    --aarch64_path /llvm_dir/build-aarch64/bin
 
 # 只跑 x86，且只跑指定项目
 python3 scripts/run_csibe.py \
     --x86_path /llvm_dir/build-x86/bin \
-    --riscv_path /llvm_dir/build-riscv/bin \
     --only_arch x86 \
     --projects compiler,jpeg-6b
 
@@ -353,14 +338,16 @@ python3 scripts/run_csibe.py \
 python3 scripts/run_csibe.py \
     --x86_path /llvm_dir/build-x86/bin \
     --riscv_path /llvm_dir/build-riscv/bin \
+    --aarch64_path /llvm_dir/build-aarch64/bin \
     --dry_run
 ```
 
 **参数说明：**
-- `--x86_path`/`--riscv_path`: x86/RISC-V 工具链目录（含 opt/clang/llc 等，替换 RunCSiBE.md 中对应的占位路径）；只跑一个架构时未用到的路径可不提供
+- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 工具链目录（含 opt/clang/llc 等，替换 RunCSiBE.md 中对应的占位路径）；只跑一个架构时未用到的路径可不提供
 - `--md_file`: (可选) RunCSiBE.md 路径，默认项目根目录下的 RunCSiBE.md
 - `--output`: (可选) 汇总输出文件，默认 `output/CSiBE_Step3_summary.txt`，自动创建目录
-- `--only_arch`: (可选) 只跑一个架构（x86/riscv）
+- `--data_output`: (可选) 数据表格输出文件（TSV），默认 `output/CSiBE_data_summary.tsv`
+- `--only_arch`: (可选) 只跑一个架构（x86/riscv/aarch64）
 - `--projects`: (可选) 只跑指定项目（逗号分隔项目名）
 - `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
