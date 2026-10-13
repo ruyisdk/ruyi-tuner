@@ -265,6 +265,40 @@ def dataset_output_name(dataset_path):
     return os.path.basename(os.path.normpath(d)) or 'dataset'
 
 
+def dataset_arch_name(dataset_path):
+    '''从数据集 .ll 文件内嵌 target triple 提取架构简称 (x86/riscv/aarch64).
+
+    用于给输出文件命名追加架构后缀, 使不同架构的数据互不覆盖: 数据集为目录时
+    读取找到的第一个 .ll 文件, 为单个 .ll 文件时直接读该文件; 找不到 .ll
+    文件或 target triple 时返回 None (调用方保持无后缀的原有命名).'''
+    if os.path.isfile(dataset_path):
+        ll_files = [dataset_path] if dataset_path.endswith('.ll') else []
+    else:
+        ll_files = []
+        for root, _dirs, files in os.walk(dataset_path):
+            for f in files:
+                if f.endswith('.ll'):
+                    ll_files.append(os.path.join(root, f))
+                    break
+            if ll_files:
+                break
+    for path in ll_files:
+        with open(path, 'r') as f:
+            text = f.read()
+        m = re.search(r'target triple\s*=\s*"([^"]+)"', text)
+        if not m:
+            continue
+        arch = m.group(1).split('-', 1)[0].lower()
+        if arch in ('x86_64', 'i386', 'i486', 'i586', 'i686'):
+            return 'x86'
+        if arch.startswith('riscv'):
+            return 'riscv'
+        if arch in ('aarch64', 'arm64'):
+            return 'aarch64'
+        return arch
+    return None
+
+
 def fix_loop_nesting(pipeline: str) -> str:
     '''
         把loop pass嵌套进离他最近的前面的function pass中，因为loop pass不能单独使用
