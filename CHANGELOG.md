@@ -147,4 +147,5 @@
 - RunCSiBE.md 全面更新：所有命令改为 project 模式（每条命令末尾都带 --search_scope project，开头说明相应改为 project 模式口径）；为全部项目新增 aarch64 架构命令（使用 build-aarch64 工具链并在 --c_flags 中显式加 --target=aarch64-unknown-linux-gnu，工具链说明更新为 x86/RISC-V/AArch64）；删除各项目实测的平均优化率行与 "--count_mode obj-size 与 --input_type c" 说明段；libmspack 命令删去多余的 -I mspack 路径（所有头文件与被编译的 .c 同目录，引号形式 include 无需额外包含路径），并统一清理命令行的多余空格与行尾空格。
 - scripts/run_csibe.py 新增 aarch64 支持：新增 --aarch64_path 参数、/home/XXX/llvm-project/build-aarch64/bin 占位路径替换与 aarch64 架构行解析，默认三套架构全跑（--only_arch 可选值同步增加 aarch64），汇总文件头写入 aarch64 工具链信息；同时去掉命令末尾自动追加 --search_scope project 的逻辑（RunCSiBE.md 命令已自带该参数）。
 - scripts/extract_tuner_data.py 新增 aarch64 列：段落标题与旧日志架构行的解析正则支持 aarch64，输出表头、数据行与合计行在 riscv 之后增加 aarch64 基线大小、实际编译后总大小与实际代码体积缩减率三列，合计行缩减率计算口径与 x86/riscv 一致。
+- scripts/run_csibe.py 去掉任务结束后的阶段 3/3 重印块：此前 ruyituner 输出的阶段 3/3 先实时回显一遍，任务结束后又由 run_csibe 以 `[run_csibe] ------------ 阶段 3/3 输出 ------------` 标题重印一遍，终端上同一内容出现两次；现在仅保留实时回显（内容照旧写入汇总文件），未截取到阶段 3/3 时改为打印一行警告提示。
 

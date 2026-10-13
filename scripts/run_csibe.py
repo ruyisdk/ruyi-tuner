@@ -141,9 +141,7 @@ def run_task(task, argv, out_fh):
     if stage3 is None:
         tail = '\n'.join(lines[-8:]) if lines else '(无输出)'
         stage3 = (f'[run_csibe] 未输出阶段3/3 (exit={rc}), 输出末尾:\n{tail}')
-    print('[run_csibe] ------------ 阶段 3/3 输出 ------------')
-    print(stage3)
-    print()
+        print(f'[run_csibe] 警告: 未输出阶段 3/3 (exit={rc}), 详情见汇总文件')
 
     out_fh.write(f'{task.project}：{task.arch}：\n')
     out_fh.write(stage3 + '\n\n')
