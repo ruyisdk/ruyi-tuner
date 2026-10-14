@@ -150,4 +150,6 @@
 - scripts/run_csibe.py 去掉任务结束后的阶段 3/3 重印块：此前 ruyituner 输出的阶段 3/3 先实时回显一遍，任务结束后又由 run_csibe 以 `[run_csibe] ------------ 阶段 3/3 输出 ------------` 标题重印一遍，终端上同一内容出现两次；现在仅保留实时回显（内容照旧写入汇总文件），未截取到阶段 3/3 时改为打印一行警告提示。
 - 输出命名新增架构后缀：项目输出名改为“项目名_架构名”（架构取自数据集 .ll 内嵌 target triple，归一为 x86/riscv/aarch64；项目名已含架构名或取不到架构时保持原名），Step1 协同对枚举文件、Step2 Pass 列表/结果 json 与实际编译对比的 .o 输出目录（output/<项目名>_<架构>/）均随之区分架构，不同架构多次运行时数据不再互相覆盖；utils/common.py 新增 dataset_arch_name 函数，ruyituner.py 据此计算项目输出名并统一透传给 train.py/run.py/real_compile.py 的 --project_name；Readme 相关命名说明与输出示例同步更新，项目结构树的 output 条目补充 Step2 文件、.o 输出目录、CSiBE 汇总与数据表格等各阶段输出说明，工作流程的训练阶段与优化阶段说明也补充了各自输出产物。
 - scripts/extract_tuner_data.py 合并进 scripts/run_csibe.py：批量运行全部项目后自动从汇总文件中抽取各架构数据并生成制表符分隔的数据表格 output/CSiBE_data_summary.tsv（新增 --data_output 参数，默认名如前述；列为项目名称 + x86/riscv/aarch64 各三列并带合计行，口径与原脚本一致）；原独立脚本删除，Readme 删除“数据抽取辅助脚本”小节，批量运行脚本小节的说明、使用演示与参数列表相应更新（含三套工具链与 --data_output）。
+- 实际编译对比阶段的“按优化序列实际编译后总大小”标签改为“按优化序列实际编译后总大小（.ll 由 clang -<等级> 生成）”，注明前端 .ll 生成所用的 --ir-opt-level 优化等级（scripts/real_compile.py 屏幕输出与留存文件同步，留存函数新增对应参数）；scripts/run_csibe.py 的解析正则兼容新旧标签；Readme 输出说明与示例同步更新。
+- scripts/real_compile.py 新增本阶段数据留存：单个项目跑完后，把实际编译对比阶段的关键数据（阶段标题、基线大小、实际编译后总大小、缩减率及回退/失败信息）写入 output/Step3_<项目名>_<架构>_data.txt（项目名已含架构后缀，多架构结果互不覆盖，内容与屏幕输出一致），便于单项目运行后回看；Readme 项目结构树与相关阶段说明同步更新。
 

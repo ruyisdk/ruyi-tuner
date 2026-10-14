@@ -14,7 +14,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 
 2. **优化阶段** (run.py): 以训练得到的协同对为有向图搜索空间，基于遗传算法搜索最优 Pass 序列；适应度定义为相对指定优化等级基线（`--opt-level`，默认 Oz）的指令数缩减比例 `(基线指令数 - 优化后指令数) / 基线指令数`，最终输出每个文件的最优 Pass 序列、代码缩减率与当前整体平均缩减率；`--search_scope project` 时改为按文件大小加权的整体缩减率 `(Σ基线 − Σ优化后) / Σ基线`，为全部文件寻找一条公共序列。**输出产物**：project 模式下把最优 pass 序列写入 `output/Step2_<项目名>_<架构>_PassList.csv`（每行一个 pass、保持顺序），并把基线/优化后大小与整体缩减率写入 `output/Step2_<项目名>_<架构>_Result.json`，供实际编译对比阶段复用；file 模式仅逐文件打印、不落盘（对应工作流程图 4-5 部分）。
 
-3. **实际编译对比阶段** (real_compile.py): 仅 C 输入且项目模式（`--input_type c` 且 `--search_scope project`）时执行，由 ruyituner.py 调用——读取优化阶段写出的 `Step2_<项目名>_<架构>_PassList.csv` 与 `Step2_<项目名>_<架构>_Result.json`，用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线 `opt 序列 → llc pic` 与评分口径一致，失败回退 clang 直通编译），.o 输出到 `output/<项目名>_<架构>/`，最终输出 clang 基线大小、按优化序列实际编译后总大小与实际代码体积缩减率（对应工作流程图 6 部分）。
+3. **实际编译对比阶段** (real_compile.py): 仅 C 输入且项目模式（`--input_type c` 且 `--search_scope project`）时执行，由 ruyituner.py 调用——读取优化阶段写出的 `Step2_<项目名>_<架构>_PassList.csv` 与 `Step2_<项目名>_<架构>_Result.json`，用找到的最优序列实际编译源码（前端 IR 复用 C→IR 阶段生成的 .ll，管线 `opt 序列 → llc pic` 与评分口径一致，失败回退 clang 直通编译），.o 输出到 `output/<项目名>_<架构>/`，最终输出 clang 基线大小、按优化序列实际编译后总大小与实际代码体积缩减率，并把本阶段关键数据留存到 `output/Step3_<项目名>_<架构>_data.txt`（对应工作流程图 6 部分）。
 
 **版本与架构无关**：RuyiTuner 不绑定特定 LLVM 版本或目标架构,目标架构完全由输入的LLVM目标架构决定，天然支持 x86、RISC-V 等架构。
 
@@ -40,6 +40,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── Step2_<项目名>_<架构>_PassList.csv         # 优化阶段(project模式): 找到的最优 pass 序列, 每行一个 pass
 │   ├── Step2_<项目名>_<架构>_Result.json          # 优化阶段(project模式): 基线/优化后大小与整体缩减率
 │   ├── <项目名>_<架构>/                           # 实际编译对比阶段: 按最优序列实际编译出的 .o 文件
+│   ├── Step3_<项目名>_<架构>_data.txt             # 实际编译对比阶段: 单项目跑完后留存的本阶段关键数据
 │   ├── CSiBE_Step3_summary.txt                    # run_csibe.py 批量运行后各项目阶段3/3输出的汇总
 │   └── CSiBE_data_summary.tsv                     # run_csibe.py 批量运行后自动生成的数据表格(各架构基线/实际编译后总大小/缩减率)
 ├── passes_examples/    # pass列表的一些示例文件
@@ -264,7 +265,7 @@ Done: one common pass sequence for 6 files.
 - **触发条件**：经 ruyituner.py 入口运行，且 `--input_type c` 与 `--search_scope project` 同时满足；`--input_type ll` 或 file 模式不执行本阶段；
 - **输入来源**：最优 pass 序列直接读优化阶段写出的 `output/Step2_<项目名>_<架构>_PassList.csv`；基线大小复用前一步写出的 `output/Step2_<项目名>_<架构>_Result.json`（不重新计算）；工具链、`--c_std`、`--c_flags`、`--opt-level`、`--ir-opt-level`、并行数等参数直接取自 ruyituner.py，源文件列表取 C→IR 阶段的基线清单；
 - **编译管线**：与评分口径一致——前端 IR 复用 C→IR 阶段生成到缓存目录的 .ll（不重复跑 clang 前端），管线为 `opt -passes=<序列> → llc pic`；个别文件 opt/llc 失败时回退 `clang -<ir-opt-level 等级> -c` 直通编译（等级与 C→IR 转换的 `--ir-opt-level` 一致，缺省与 `--opt-level` 相同；在数据集根目录下执行）。编译出的 .o 输出到 `output/<项目名>_<架构>/` 目录；
-- **输出**：clang -<优化等级> 基线大小（来自前一步 GA 输出）、按优化序列实际编译后总大小（全部文件 .o 的 .text 大小合计）与实际代码体积缩减率（与基线对比），并提示序列编译失败回退直通编译的文件数。
+- **输出**：clang -<优化等级> 基线大小（来自前一步 GA 输出）、按优化序列实际编译后总大小（全部文件 .o 的 .text 大小合计，标签注明 .ll 由 clang 以 --ir-opt-level 等级生成）与实际代码体积缩减率（与基线对比），并提示序列编译失败回退直通编译的文件数；以上关键数据同时留存到 `output/Step3_<项目名>_<架构>_data.txt`，便于单项目跑完后回看。
 
 **使用演示：**
 
@@ -285,7 +286,7 @@ python3 ruyituner.py \
 [ruyituner] .o 输出目录: /home/xxx/ruyi-tuner/output/bzip2-1.0.2_x86
 ============================================================
 [ruyituner] clang -Oz 基线大小 (来自前一步 GA 输出): 64819
-[ruyituner] 按优化序列实际编译后总大小: 44601
+[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -Oz 生成）: 44601
 [ruyituner] 实际代码体积缩减率: 31.19%
 ```
 

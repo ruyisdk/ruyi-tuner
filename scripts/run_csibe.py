@@ -162,7 +162,7 @@ PROJECT_RE = re.compile(r'^(\d+)\.\s*(.+)$')
 ARCH_LINE_RE = re.compile(r'^(x86|riscv|aarch64)\s*[:：]?$')
 METRIC_RE = re.compile(
     r'^\[ruyituner\] (?:clang -\S+ )?(基线大小 .+): (\d+)$'
-    r'|^\[ruyituner\] (按优化序列实际编译后总大小|实际编译后总大小): (\d+)$'
+    r'|^\[ruyituner\] (按优化序列实际编译后总大小(?:（[^）]*）)?|实际编译后总大小): (\d+)$'
     r'|^\[ruyituner\] (实际代码体积缩减率): ([\d.]+)%$'
 )
 METRIC_KEYS = {

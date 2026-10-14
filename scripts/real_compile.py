@@ -101,6 +101,35 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
     return total_text, fallback, failures
 
 
+def save_stage_data(output_dir, project, total_stages, opt_level, ir_opt_level,
+                    seq_len, obj_dir, baseline, total_text, rate, fallback,
+                    failures):
+    """把实际编译对比阶段的关键数据留存到单独文件.
+
+    项目名由 ruyituner.py 统一传入, 已含架构后缀 (如 bzip2-1.0.2_x86),
+    多个架构运行时各自的留存文件互不覆盖; 内容与本阶段屏幕输出一致."""
+    data_path = os.path.join(output_dir, f'Step3_{project}_data.txt')
+    lines = [
+        '=' * 60,
+        f'[ruyituner] 阶段 3/{total_stages}: 实际编译对比 (项目: {project}, 序列 {seq_len} 个 pass)',
+        f'[ruyituner] .o 输出目录: {obj_dir}',
+        '=' * 60,
+        f'[ruyituner] clang -{opt_level} 基线大小 (来自前一步 GA 输出): {int(baseline)}',
+        f'[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -{ir_opt_level} 生成）: {total_text}',
+        f'[ruyituner] 实际代码体积缩减率: {rate * 100:.2f}%',
+    ]
+    if fallback:
+        lines.append(f'[ruyituner] {fallback} 个文件序列编译失败, 回退直通编译.')
+    if failures:
+        lines.append('[ruyituner] 编译失败的文件 (最多显示20个):')
+        lines += [f'  - {msg}' for msg in failures[:20]]
+        if len(failures) > 20:
+            lines.append(f'  ... 其余 {len(failures) - 20} 个省略')
+    with open(data_path, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    print(f'[ruyituner] 本阶段数据已留存: {data_path}')
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='实际编译对比: 用 GA 找到的最优 pass 序列实际编译源码, 输出实际代码体积缩减率')
@@ -191,7 +220,7 @@ def main():
         src_root, ll_items, obj_dir, clang, args.llvm_tools_path, seq,
         args.ir_opt_level, args.c_std, args.c_flags, args.num_workers)
     print(f'[ruyituner] clang -{args.opt_level} 基线大小 (来自前一步 GA 输出): {int(baseline)}')
-    print(f'[ruyituner] 按优化序列实际编译后总大小: {total_text}')
+    print(f'[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -{args.ir_opt_level} 生成）: {total_text}')
     rate = (baseline - total_text) / baseline if baseline else 0.0
     print(f'[ruyituner] 实际代码体积缩减率: {rate * 100:.2f}%')
     if fallback:
@@ -202,6 +231,11 @@ def main():
             print(f'  - {msg}')
         if len(failures) > 20:
             print(f'  ... 其余 {len(failures) - 20} 个省略')
+
+    # 项目跑完后, 把本阶段的关键数据留存到 output 下的单独文件, 便于回看
+    save_stage_data(args.output_dir, project, args.total_stages, args.opt_level,
+                    args.ir_opt_level, len(seq), obj_dir, baseline, total_text,
+                    rate, fallback, failures)
 
 
 if __name__ == '__main__':
