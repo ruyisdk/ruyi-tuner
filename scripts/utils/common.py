@@ -217,11 +217,12 @@ def get_inst_count_method(llvm_tools_path=None, count_mode='auto'):
 def get_opt_default_arch(opt_path):
     '''从 `opt --version` 输出中提取默认目标架构 (target triple 的第一段).
 
-    构建时未设置默认目标 (如通用构建) 时返回 None.'''
+    构建时未设置默认目标 (如通用构建) 时返回 None; 只匹配同一行的空格/制表符,
+    避免默认目标为空时跨行误取下一行 "Host CPU" 的 "Host".'''
     r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
     if r.returncode != 0:
         return None
-    m = re.search(r'Default target:\s*(\S*)', r.stdout + r.stderr)
+    m = re.search(r'Default target:[ \t]*(\S+)', r.stdout + r.stderr)
     if not m or not m.group(1):
         return None
     return m.group(1).split('-', 1)[0]
@@ -262,6 +263,40 @@ def dataset_output_name(dataset_path):
     if os.path.isfile(d):
         return os.path.splitext(os.path.basename(d))[0]
     return os.path.basename(os.path.normpath(d)) or 'dataset'
+
+
+def dataset_arch_name(dataset_path):
+    '''从数据集 .ll 文件内嵌 target triple 提取架构简称 (x86/riscv/aarch64).
+
+    用于给输出文件命名追加架构后缀, 使不同架构的数据互不覆盖: 数据集为目录时
+    读取找到的第一个 .ll 文件, 为单个 .ll 文件时直接读该文件; 找不到 .ll
+    文件或 target triple 时返回 None (调用方保持无后缀的原有命名).'''
+    if os.path.isfile(dataset_path):
+        ll_files = [dataset_path] if dataset_path.endswith('.ll') else []
+    else:
+        ll_files = []
+        for root, _dirs, files in os.walk(dataset_path):
+            for f in files:
+                if f.endswith('.ll'):
+                    ll_files.append(os.path.join(root, f))
+                    break
+            if ll_files:
+                break
+    for path in ll_files:
+        with open(path, 'r') as f:
+            text = f.read()
+        m = re.search(r'target triple\s*=\s*"([^"]+)"', text)
+        if not m:
+            continue
+        arch = m.group(1).split('-', 1)[0].lower()
+        if arch in ('x86_64', 'i386', 'i486', 'i586', 'i686'):
+            return 'x86'
+        if arch.startswith('riscv'):
+            return 'riscv'
+        if arch in ('aarch64', 'arm64'):
+            return 'aarch64'
+        return arch
+    return None
 
 
 def fix_loop_nesting(pipeline: str) -> str:

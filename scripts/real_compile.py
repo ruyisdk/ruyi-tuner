@@ -8,7 +8,7 @@
 
 用法:
   python3 scripts/real_compile.py --project_name <项目名> --output_dir <目录> \
-      --cache_dir <IR缓存目录> --llvm_tools_path <目录> --opt_level Oz \
+      --cache_dir <IR缓存目录> --llvm_tools_path <目录> --opt_level Os --ir_opt_level Oz \
       [--c_std gnu89] [--c_flags '-DHAVE_CONFIG_H'] [--num_workers 16] [--total_stages 3]
 """
 
@@ -33,14 +33,15 @@ from utils.common import find_clang, fix_loop_nesting, get_object_file_text_size
 
 
 def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
-                          seq, opt_level, c_std=None, c_flags=None, num_workers=16):
+                          seq, ir_opt_level, c_std=None, c_flags=None, num_workers=16):
     """把 GA 找到的最优 pass 序列实际应用到源码编译, 生成 .o 到 obj_dir 下.
 
     ll_items: [(相对路径, .ll 缓存文件, 源文件), ...]; 前端 IR 直接复用 C→IR
     阶段生成的 .ll, 不再重复运行 clang 前端; 后续管线与评分口径一致:
     opt -S -passes=<序列> -> llc -relocation-model=pic -filetype=obj;
-    任一环节失败时回退 clang -<level> -c 直通编译 (与评分口径的回退策略
-    一致); 返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
+    任一环节失败时回退 clang -<ir_opt_level> -c 直通编译 (ir_opt_level 为
+    C→IR 转换的优化等级, 与缓存 IR 的前端等级一致, 而非基线优化等级);
+    返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
     bin_dir = llvm_tools_path or ''
     opt_path = os.path.join(bin_dir, 'opt') if bin_dir else 'opt'
     llc_path = os.path.join(bin_dir, 'llc') if bin_dir else 'llc'
@@ -66,8 +67,8 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
                     size = get_object_file_text_size(dst, llvm_tools_path)
                     if size is not None:
                         return rel, size, ''
-            # 序列管线失败: 回退 clang 直通编译, 保证构建产物完整
-            fb = [clang, f'-{opt_level}', '-c']
+            # 序列管线失败: 回退 clang 直通编译 (用 C→IR 转换的优化等级, 保证构建产物完整)
+            fb = [clang, f'-{ir_opt_level}', '-c']
             if c_flags:
                 fb += shlex.split(c_flags)
             if c_std is not None:
@@ -100,6 +101,35 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
     return total_text, fallback, failures
 
 
+def save_stage_data(output_dir, project, total_stages, opt_level, ir_opt_level,
+                    seq_len, obj_dir, baseline, total_text, rate, fallback,
+                    failures):
+    """把实际编译对比阶段的关键数据留存到单独文件.
+
+    项目名由 ruyituner.py 统一传入, 已含架构后缀 (如 bzip2-1.0.2_x86),
+    多个架构运行时各自的留存文件互不覆盖; 内容与本阶段屏幕输出一致."""
+    data_path = os.path.join(output_dir, f'Step3_{project}_data.txt')
+    lines = [
+        '=' * 60,
+        f'[ruyituner] 阶段 3/{total_stages}: 实际编译对比 (项目: {project}, 序列 {seq_len} 个 pass)',
+        f'[ruyituner] .o 输出目录: {obj_dir}',
+        '=' * 60,
+        f'[ruyituner] clang -{opt_level} 基线大小 (来自前一步 GA 输出): {int(baseline)}',
+        f'[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -{ir_opt_level} 生成）: {total_text}',
+        f'[ruyituner] 实际代码体积缩减率: {rate * 100:.2f}%',
+    ]
+    if fallback:
+        lines.append(f'[ruyituner] {fallback} 个文件序列编译失败, 回退直通编译.')
+    if failures:
+        lines.append('[ruyituner] 编译失败的文件 (最多显示20个):')
+        lines += [f'  - {msg}' for msg in failures[:20]]
+        if len(failures) > 20:
+            lines.append(f'  ... 其余 {len(failures) - 20} 个省略')
+    with open(data_path, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(lines) + '\n')
+    print(f'[ruyituner] 本阶段数据已留存: {data_path}')
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='实际编译对比: 用 GA 找到的最优 pass 序列实际编译源码, 输出实际代码体积缩减率')
@@ -112,7 +142,9 @@ def main():
     parser.add_argument('--llvm_tools_path', type=str, required=True,
                         help='LLVM 工具链路径')
     parser.add_argument('--opt_level', type=str, default='Oz',
-                        help='直通编译回退用的优化等级, 默认 Oz')
+                        help='基线编译的优化等级 (仅用于输出标签, 说明基线来源), 默认 Oz')
+    parser.add_argument('--ir_opt_level', type=str, default='Oz',
+                        help='序列编译失败时直通编译回退用的优化等级 (与 C→IR 转换一致), 默认 Oz')
     parser.add_argument('--c_std', type=str, default=None,
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选)')
     parser.add_argument('--c_flags', type=str, default=None,
@@ -186,9 +218,9 @@ def main():
     print('=' * 60)
     total_text, fallback, failures = real_compile_with_seq(
         src_root, ll_items, obj_dir, clang, args.llvm_tools_path, seq,
-        args.opt_level, args.c_std, args.c_flags, args.num_workers)
-    print(f'[ruyituner] 基线大小 (来自前一步 GA 输出): {int(baseline)}')
-    print(f'[ruyituner] 实际编译后总大小: {total_text}')
+        args.ir_opt_level, args.c_std, args.c_flags, args.num_workers)
+    print(f'[ruyituner] clang -{args.opt_level} 基线大小 (来自前一步 GA 输出): {int(baseline)}')
+    print(f'[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -{args.ir_opt_level} 生成）: {total_text}')
     rate = (baseline - total_text) / baseline if baseline else 0.0
     print(f'[ruyituner] 实际代码体积缩减率: {rate * 100:.2f}%')
     if fallback:
@@ -199,6 +231,11 @@ def main():
             print(f'  - {msg}')
         if len(failures) > 20:
             print(f'  ... 其余 {len(failures) - 20} 个省略')
+
+    # 项目跑完后, 把本阶段的关键数据留存到 output 下的单独文件, 便于回看
+    save_stage_data(args.output_dir, project, args.total_stages, args.opt_level,
+                    args.ir_opt_level, len(seq), obj_dir, baseline, total_text,
+                    rate, fallback, failures)
 
 
 if __name__ == '__main__':

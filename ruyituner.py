@@ -4,13 +4,16 @@
 ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目模式下的实际编译对比.
 
 默认流程:
-  1. 训练:  运行 scripts/train.py, 输出 Step1_<项目名>_EnumeratedPairs.csv;
+  1. 训练:  运行 scripts/train.py, 输出 Step1_<项目名>_<架构>_EnumeratedPairs.csv;
   2. 优化:  用训练得到的协同 pass 对运行 scripts/run.py 进行 GA 优化;
   3. 实际编译对比 (仅 --input_type c 且 --search_scope project): 运行
      scripts/real_compile.py, 用 GA 找到的最优序列
-     (output/Step2_<项目名>_PassList.csv) 实际编译源码, .o 输出到
-     output/<项目名>/, 基线复用优化阶段写出的 Step2_<项目名>_Result.json,
-     最终输出实际代码体积缩减率 (与评分口径一致).
+     (output/Step2_<项目名>_<架构>_PassList.csv) 实际编译源码, .o 输出到
+     output/<项目名>_<架构>/, 基线复用优化阶段写出的
+     Step2_<项目名>_<架构>_Result.json, 最终输出实际代码体积缩减率 (与评分口径一致).
+
+各输出名中的 <架构> (x86/riscv/aarch64) 取自数据集 .ll 内嵌 target triple;
+项目名本身已含架构名或取不到架构时不追加, 保证多架构的数据互不覆盖.
 
 用法示例:
   # 完整流程 (训练 + 优化)
@@ -19,11 +22,12 @@ ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目�
   # 仅训练 (不优化)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
 
-  # 仅优化 (需要已有 Step1_<项目名>_EnumeratedPairs.csv, 如 x86 数据集对应 Step1_x86_EnumeratedPairs.csv)
+  # 仅优化 (需要已有 Step1_<项目名>_<架构>_EnumeratedPairs.csv, 如 x86 数据集对应 Step1_x86_EnumeratedPairs.csv)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step1_x86_EnumeratedPairs.csv
 
-  # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级(默认Oz)生成.ll到缓存目录, 流程结束自动清理)
+  # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--ir-opt-level优化等级生成.ll到缓存目录,
+  # 缺省与基线优化等级--opt-level一致; 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
 
   # --input_type c 搭配 --count_mode obj-size 时, 评分基线直接用 clang -O<level> -c
@@ -61,17 +65,17 @@ DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
 
 # scripts/ 目录加入模块搜索路径, 复用公共函数 (dataset_output_name 等)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
-from utils.common import find_clang, dataset_output_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
+from utils.common import find_clang, dataset_output_name, dataset_arch_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
 
 
-def build_train_cmd(args, dataset):
+def build_train_cmd(args, dataset, project_name):
     """根据命令行参数构造 train.py 的命令."""
     cmd = [sys.executable, TRAIN_SCRIPT,
            '--dataset', dataset,
            '--llvm_tools_path', args.llvm_tools_path,
            '--num_workers', str(args.num_workers),
            '--count_mode', args.count_mode,
-           '--project_name', dataset_output_name(args.dataset)]
+           '--project_name', project_name]
     if args.output_dir is not None:
         cmd += ['--output_dir', args.output_dir]
     if args.passfile is not None:
@@ -96,8 +100,9 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     被其他源文件 #include 的 .i 片段 (如 jikespg 的 lpgact.i) 不单独编译, 跳过并提示;
     编译在数据集根目录 (src_root) 下执行, c_flags 中的相对路径 (如 -Iinclude)
     以数据集根目录为基准解析;
-    opt_level 为 IR 生成时的优化等级 (默认 Oz, 与 --opt-level 一致), 以
-    clang -<opt_level> -S -emit-llvm 编译; 仅 -O0 附加 -Xclang -disable-O0-optnone;
+    opt_level 为 IR 生成时的优化等级 (由 --ir-opt-level 控制, 默认 Oz,
+    缺省与基线优化等级 --opt-level 一致), 以 clang -<opt_level> -S -emit-llvm
+    编译; 仅 -O0 附加 -Xclang -disable-O0-optnone;
     c_std 非 None 时以 -std=<c_std> 传给 clang (如 gnu89, 用于旧式 C 代码);
     c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
     manifest_path 非 None 时把 .ll 相对路径 -> 原始源文件 的映射连同 src_root/
@@ -245,14 +250,16 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     return ok, len(failures)
 
 
-def build_real_compile_cmd(args, out_dir, cache_dir, total_stages):
+def build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name):
     """构造实际编译对比脚本 (scripts/real_compile.py) 的命令."""
     cmd = [sys.executable, REAL_COMPILE_SCRIPT,
-           '--project_name', dataset_output_name(args.dataset),
+           '--project_name', project_name,
            '--output_dir', out_dir,
            '--cache_dir', cache_dir,
            '--llvm_tools_path', args.llvm_tools_path,
            '--opt_level', args.opt_level,
+           # 回退直通编译用 C→IR 转换的优化等级 (缺省与 --opt-level 一致)
+           '--ir_opt_level', args.ir_opt_level or args.opt_level,
            '--num_workers', str(args.num_workers),
            '--total_stages', str(total_stages)]
     if args.c_std is not None:
@@ -271,7 +278,7 @@ def main():
                         help='数据集目录或单个 .c/.i 源文件 (训练与优化共用)')
     parser.add_argument('--input_type', type=str, required=True,
                         choices=['ll', 'c'],
-                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--opt-level优化等级生成.ll再走原路径)')
+                        help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--ir-opt-level优化等级生成.ll再走原路径)')
     parser.add_argument('--c_std', type=str, default=None,
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
     parser.add_argument('--c_flags', type=str, default=None,
@@ -287,6 +294,9 @@ def main():
     parser.add_argument('--opt-level', type=str, default='Oz',
                         choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
                         help='GA 基线评分的优化等级, 默认 Oz (传给 run.py)')
+    parser.add_argument('--ir-opt-level', type=str, default=None,
+                        choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
+                        help='C→IR 转换时 clang 的优化等级, 缺省与 --opt-level 一致 (可选, 仅 --input_type c 生效)')
     parser.add_argument('--count_mode', type=str, default='auto',
                         choices=['auto', 'opt-stats', 'text', 'obj-size'],
                         help='指令计数方式开关 (传给 train.py 与 run.py): auto(默认) | opt-stats | text | obj-size')
@@ -308,7 +318,7 @@ def main():
     parser.add_argument('--only_run', action='store_true',
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
-                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step1_<项目名>_EnumeratedPairs.csv')
+                        help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv')
     # --c_flags 的值常以 - 开头 (如 -DHAVE_CONFIG_H), argparse 会误当成选项报
     # "expected one argument"; 解析前把 "--c_flags <值>" 合并为 "--c_flags=<值>"
     argv = list(sys.argv[1:])
@@ -344,13 +354,15 @@ def main():
         if clang is None:
             print('[ruyituner] 未找到 clang: --llvm_tools_path 与系统 PATH 中均无可用 clang, 终止.')
             sys.exit(1)
+        # C→IR 转换的优化等级: --ir-opt-level 缺省时与基线优化等级 --opt-level 一致
+        ir_opt_level = args.ir_opt_level or args.opt_level
         std_info = f', C 标准: {args.c_std}' if args.c_std else ''
         flags_info = f', 额外参数: {args.c_flags}' if args.c_flags else ''
-        print(f'[ruyituner] 输入为 c: 使用 clang 以 -{args.opt_level} 把 .c/.i 编译为 .ll ({clang}{std_info}{flags_info})')
+        print(f'[ruyituner] 输入为 c: 使用 clang 以 -{ir_opt_level} 把 .c/.i 编译为 .ll ({clang}{std_info}{flags_info})')
         cache_dir = tempfile.mkdtemp(prefix='ruyituner_ir_')
         print(f'[ruyituner] IR 缓存目录: {cache_dir}')
         manifest_path = os.path.join(cache_dir, 'baseline_manifest.json')
-        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags, manifest_path=manifest_path, opt_level=args.opt_level)
+        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags, manifest_path=manifest_path, opt_level=ir_opt_level)
         if ok == 0:
             print('[ruyituner] 未能从任何 .c/.i 文件生成 .ll, 终止.')
             shutil.rmtree(cache_dir, ignore_errors=True)
@@ -358,6 +370,18 @@ def main():
         dataset = cache_dir
     else:
         dataset = args.dataset
+
+    # 项目输出名: 数据集名后追加架构名 (取自数据集 .ll 内嵌 target triple), 使
+    # x86/riscv/aarch64 的 Step1/Step2/.o 产物互不覆盖; 项目名已含架构名或
+    # 数据集缺少 triple 时保持原名
+    project_base = dataset_output_name(args.dataset)
+    arch = dataset_arch_name(dataset)
+    if arch and arch.lower() not in project_base.lower():
+        project_name = f'{project_base}_{arch}'
+    else:
+        project_name = project_base
+    print(f'[ruyituner] 项目输出名: {project_name}' +
+          (f' (架构: {arch})' if arch else ''))
 
     try:
         out_dir = args.output_dir or DEFAULT_OUTPUT_DIR
@@ -367,13 +391,13 @@ def main():
             print('=' * 60)
             print(f'[ruyituner] 阶段 1/{total_stages}: 训练 (数据集: {dataset}, 输出目录: {out_dir})')
             print('=' * 60)
-            rc = subprocess.run(build_train_cmd(args, dataset)).returncode
+            rc = subprocess.run(build_train_cmd(args, dataset, project_name)).returncode
             if rc != 0:
                 print(f'[ruyituner] 训练失败 (exit={rc}), 终止.')
                 sys.exit(rc)
 
         if not args.only_train:
-            paircsv = args.paircsv or os.path.join(out_dir, f'Step1_{dataset_output_name(args.dataset)}_EnumeratedPairs.csv')
+            paircsv = args.paircsv or os.path.join(out_dir, f'Step1_{project_name}_EnumeratedPairs.csv')
             if not os.path.isfile(paircsv):
                 print(f'[ruyituner] 找不到协同对文件: {paircsv}, 请先完成训练.')
                 sys.exit(1)
@@ -386,7 +410,7 @@ def main():
                        '--search_scope', args.search_scope,
                        '--max-path-length', str(args.max_path_length),
                        '--output_dir', out_dir,
-                       '--project_name', dataset_output_name(args.dataset)]
+                       '--project_name', project_name]
             if args.input_type == 'c':
                 # C 输入: 把基线清单传给 run.py, obj-size 计数方式下基线改用
                 # clang -O<level> -c 直接编译源码生成 .o 统计
@@ -399,7 +423,7 @@ def main():
                 print(f'[ruyituner] 优化失败 (exit={rc}).')
                 sys.exit(rc)
             if do_real_compile:
-                rc = subprocess.run(build_real_compile_cmd(args, out_dir, cache_dir, total_stages)).returncode
+                rc = subprocess.run(build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name)).returncode
                 if rc != 0:
                     print(f'[ruyituner] 实际编译对比失败 (exit={rc}).')
                     sys.exit(rc)

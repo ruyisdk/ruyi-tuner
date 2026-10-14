@@ -2,91 +2,95 @@
 
 本文档为RuyiTuner运行datasets/c_files/CSiBE-v2.1.1下各个项目的详细说明，每个项目都给出了运行的具体命令参数，运行过程中注意替换工具链路径为本地路径。
 
-本文档命令均使用 `--count_mode obj-size` 与 `--input_type c`：此时 RuyiTuner 的评分基线直接用 clang 以 `--opt-level`（默认 Oz）优化等级把源文件编译为 .o 后统计 .text 大小（`clang -O<level> -c`，与 CSiBE 自身的编译口径一致），文中"平均优化率"即相对该基线的整体缩减率。
+本文档列出的命令均加了 --search_scope project 参数，走 project 模式：为整个项目找一条公共的最优 pass 序列（该模式输出一条公共 Path 与整体缩减率 Overall Reduction Rate），例如：
 
-本文档列出的命令均未加 --search_scope 参数，默认走 file 模式：为每个文件各找一条最优 pass 序列，文中"平均优化率"即该模式下全部文件加权汇总的整体缩减率。若要为整个项目找一条公共的最优 pass 序列，在命令末尾追加 --search_scope project 即可（该模式输出一条公共 Path 与整体缩减率 Overall Reduction Rate），例如：
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+其中，bzip2-1.0.2、cg_compiler_opensrc、compiler、jikespg-1.3、lwip-0.5.3.preproc、mpgcut-1.1、replaypc-0.4.0.preproc、ttt-0.10.1.preproc、zlib-1.1.4，这9个项目，只需要添加--c_std gnu89 之后，正常的配置参数运行即可。flex-2.5.31、jpeg-6b、libmspack、libpng-1.2.5、linux-2.4.23-pre3-testplatform、mpeg2dec-0.3.1、OpenTCP-1.0.4、teem-1.6.0-src、unrarlib-0.4.0则需要一些额外的--c_flags参数。
 
-bzip2-1.0.2、cg_compiler_opensrc、compiler、jikespg-1.3、lwip-0.5.3.preproc、mpgcut-1.1、replaypc-0.4.0.preproc、ttt-0.10.1.preproc、zlib-1.1.4，这9个项目，只需要添加--c_std gnu89 之后，正常的配置参数运行即可。
-
-flex-2.5.31、jpeg-6b、libmspack、libpng-1.2.5、linux-2.4.23-pre3-testplatform、mpeg2dec-0.3.1、OpenTCP-1.0.4、teem-1.6.0-src、unrarlib-0.4.0则需要一些额外的--c_flags参数。
-
-本次测试采用的是LLVM22.1.0-rc2的x86和RISC-V版本。
+本次测试采用的是LLVM22.1.0-rc2的x86、RISC-V和AArch64版本，其中RISC-V和AArch64为交叉工具链（宿主x86_64），AArch64命令需要在 --c_flags 中显式添加 --target=aarch64-unknown-linux-gnu。
 
 具体如下：
 
 ## 1.bzip2-1.0.2
 x86：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89
-9个文件都能成功，平均优化率为15.43%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2/  --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89
-9个文件都能成功，平均优化率为 8.68%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 2.cg_compiler_opensrc
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/cg_compiler_opensrc/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89
-22个文件都能成功，平均优化率为30.99%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/cg_compiler_opensrc/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/cg_compiler_opensrc/   --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89
-22个文件都能成功，平均优化率为28.74%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/cg_compiler_opensrc/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/cg_compiler_opensrc/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 3.compiler
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/  --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89
-6个文件都能成功，平均优化率42%。
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/  --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89
-6个文件都能成功，平均优化率53.94%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 4.flex-2.5.31
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
-22个文件都能成功，，平均优化率11.45%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DHAVE_CONFIG_H' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
-22个文件都能成功，，平均优化率9.74%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DHAVE_CONFIG_H' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DHAVE_CONFIG_H --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 5.jikespg-1.3
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jikespg-1.3/     --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89
-17个文件都能成功，平均优化率11.42%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jikespg-1.3/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jikespg-1.3/     --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89
-17个文件都能成功，平均优化率10.61%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jikespg-1.3/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jikespg-1.3/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 6.jpeg-6b
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jpeg-6b/     --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DSTDC_HEADERS'
-67个文件都能成功，平均优化率37.93%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jpeg-6b/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DSTDC_HEADERS' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jpeg-6b/     --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin      --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DSTDC_HEADERS'
-67个文件都能成功，平均优化率36.87%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jpeg-6b/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DSTDC_HEADERS' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/jpeg-6b/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-DSTDC_HEADERS --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 7.libmspack
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libmspack/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -I/home/XXX/ruyi-tuner/datasets/c_files/CSiBE-v2.1.1/libmspack/mspack'
-25个文件都能成功，平均优化率40.29%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libmspack/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libmspack/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -I/home/XXX/ruyi-tuner/datasets/c_files/CSiBE-v2.1.1/libmspack/mspack --sysroot=/opt/riscv/sysroot'
-25个文件都能成功，平均优化率34.51%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libmspack/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE --sysroot=/opt/riscv/sysroot' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libmspack/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 8.libpng-1.2.5
 x86：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/     --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
-18个文件都能成功，平均优化率7.82%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/ --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-I../include/zlib'
-18个文件都能成功，平均优化率8.95%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/ --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-I../include/zlib' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/libpng-1.2.5/ --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 9.linux-2.4.23-pre3-testplatform
 
@@ -94,85 +98,90 @@ CSiBE自带脚本编译出来的文件，没有这个项目。Linux 内核的 .c
 
 ## 10.lwip-0.5.3.preproc
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc     --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
-30个文件都能成功，平均优化率10.24%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc     --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89
-30个文件都能成功，平均优化率 13.53%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 11.mpeg2dec-0.3.1
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpeg2dec-0.3.1 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude'
-C→IR 编译完成: 成功 28 个, 失败 1 个.
-28个文件成功，平均优化率61.47%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpeg2dec-0.3.1 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpeg2dec-0.3.1 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude'
-C→IR 编译完成: 成功 28 个, 失败 1 个.
-28个文件成功，平均优化率12.51%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpeg2dec-0.3.1 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpeg2dec-0.3.1 --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 12.mpgcut-1.1
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpgcut-1.1    --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89
-1个文件都能成功，平均优化率2.31%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpgcut-1.1 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpgcut-1.1    --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin  --count_mode obj-size --input_type c --c_std gnu89
-1个文件都能成功，平均优化率0.90%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpgcut-1.1 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/mpgcut-1.1 --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 13.OpenTCP-1.0.4
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io='
-22个文件都能成功，平均优化率35.74%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io=' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io='
-22个文件都能成功，平均优化率37.47%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -D__IO_NEAR -D__io=' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/OpenTCP-1.0.4 --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu -Iinclude -D__IO_NEAR -D__io=' --search_scope project
 
 ## 14.replaypc-0.4.0.preproc
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/replaypc-0.4.0.preproc    --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
- C→IR 编译完成: 成功 38 个, 失败 1 个.
-38个文件成功，平均优化率15.68%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/replaypc-0.4.0.preproc --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/replaypc-0.4.0.preproc    --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89 
- C→IR 编译完成: 成功 38 个, 失败 1 个.
-38个文件成功，平均优化率13.74%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/replaypc-0.4.0.preproc --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/replaypc-0.4.0.preproc --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 15.teem-1.6.0-src
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/teem-1.6.0-src --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -DTEEM_32BIT=1 -DTEEM_ENDIAN=1234 -DTEEM_QNANHIBIT=1 -DTEEM_BIGBITFIELD=1 -DTEEM_DIO=0 -DTEEM32BIT=1'
-293个文件都能成功，平均优化率26.20%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/teem-1.6.0-src --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -DTEEM_32BIT=1 -DTEEM_ENDIAN=1234 -DTEEM_QNANHIBIT=1 -DTEEM_BIGBITFIELD=1 -DTEEM_DIO=0 -DTEEM32BIT=1' --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/teem-1.6.0-src --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -DTEEM_32BIT=1 -DTEEM_ENDIAN=1234 -DTEEM_QNANHIBIT=1 -DTEEM_BIGBITFIELD=1 -DTEEM_DIO=0 -DTEEM32BIT=1'
-293个文件都能成功，平均优化率22.27%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/teem-1.6.0-src --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -DTEEM_32BIT=1 -DTEEM_ENDIAN=1234 -DTEEM_QNANHIBIT=1 -DTEEM_BIGBITFIELD=1 -DTEEM_DIO=0 -DTEEM32BIT=1' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/teem-1.6.0-src --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iinclude -DTEEM_32BIT=1 -DTEEM_ENDIAN=1234 -DTEEM_QNANHIBIT=1 -DTEEM_BIGBITFIELD=1 -DTEEM_DIO=0 -DTEEM32BIT=1 --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 16.ttt-0.10.1.preproc
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/ttt-0.10.1.preproc    --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
-6个文件都能成功，平均优化率33.02%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/ttt-0.10.1.preproc --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/ttt-0.10.1.preproc    --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89 
-6个文件都能成功，平均优化率27.19%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/ttt-0.10.1.preproc --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/ttt-0.10.1.preproc --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 17.unrarlib-0.4.0
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/unrarlib-0.4.0 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iunrarlib'
-3个文件都能成功，平均优化率23.99%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/unrarlib-0.4.0 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iunrarlib' --search_scope project
 
 riscv：
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/unrarlib-0.4.0 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iunrarlib'
-3个文件都能成功，平均优化率23.70%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/unrarlib-0.4.0 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iunrarlib' --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/unrarlib-0.4.0 --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '-Iunrarlib --target=aarch64-unknown-linux-gnu' --search_scope project
 
 ## 18.zlib-1.1.4
 x86:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/zlib-1.1.4    --llvm_tools_path /home/XXX/llvm-project/build-x86/bin     --count_mode obj-size --input_type c --c_std gnu89 
-16个文件都能成功，平均优化率30.62%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/zlib-1.1.4 --llvm_tools_path /home/XXX/llvm-project/build-x86/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
 
 riscv:
-python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/zlib-1.1.4    --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin     --count_mode obj-size --input_type c --c_std gnu89 
-16个文件都能成功，平均优化率35.19%
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/zlib-1.1.4 --llvm_tools_path /home/XXX/llvm-project/build-riscv/bin --count_mode obj-size --input_type c --c_std gnu89 --search_scope project
+
+aarch64:
+python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/zlib-1.1.4 --llvm_tools_path /home/XXX/llvm-project/build-aarch64/bin --count_mode obj-size --input_type c --c_std gnu89 --c_flags '--target=aarch64-unknown-linux-gnu' --search_scope project
