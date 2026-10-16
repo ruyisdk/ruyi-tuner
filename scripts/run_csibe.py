@@ -19,12 +19,15 @@ aarch64/bin) 替换为实际路径, /home/XXX/ruyi-tuner 替换为本项目根�
 
   只跑 x86:          追加 --only_arch x86
   只跑指定项目:      追加 --projects compiler,jpeg-6b
+  替换数据集路径:    追加 --dataset_dir <目录> (把 md 命令中的
+                     datasets/c_files/CSiBE-v2.1.1 替换为指定目录)
   只看将执行的命令:  追加 --dry_run
   统一透传优化等级:  追加 --opt-level Os --ir-opt-level Oz (追加到每条 ruyituner
                      命令末尾; md 命令中已带同名参数时不重复追加)
 
 注意: 需在项目根目录 (ruyi-tuner 主目录) 下运行; RunCSiBE.md 中的命令按项目根
 目录组织相对路径 (datasets/、--c_flags 的 -Ixxx 等), 从其它目录运行会解析错误.
+testdata 与 linux-2.4.23-pre3-testplatform 两个目录不参与运行, 解析后自动跳过.
 """
 
 import argparse
@@ -43,11 +46,16 @@ DEFAULT_MD = os.path.join(PROJECT_ROOT, 'RunCSiBE.md')
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, 'output', 'CSiBE_Step3_summary.txt')
 DEFAULT_DATA_OUTPUT = os.path.join(PROJECT_ROOT, 'output', 'CSiBE_data_summary.tsv')
 
+# 不参与运行的项目: testdata 为测试数据; linux-2.4.23-pre3-testplatform 的
+# .c 文件几乎都不能被 clang 独立编译 (RunCSiBE.md 已说明该目录不处理)
+SKIP_PROJECTS = {'testdata', 'linux-2.4.23-pre3-testplatform'}
+
 # md 中的占位路径 -> 实际路径
 X86_PLACEHOLDER = '/home/XXX/llvm-project/build-x86/bin'
 RISCV_PLACEHOLDER = '/home/XXX/llvm-project/build-riscv/bin'
 AARCH64_PLACEHOLDER = '/home/XXX/llvm-project/build-aarch64/bin'
 RUYITUNER_PLACEHOLDER = '/home/XXX/ruyi-tuner'
+DATASET_PLACEHOLDER = 'datasets/c_files/CSiBE-v2.1.1'
 
 HEADING_RE = re.compile(r'^##\s*\d+\.\s*(\S+)')
 ARCH_RE = re.compile(r'^(x86|riscv|aarch64)\s*[:：]\s*$')
@@ -83,16 +91,23 @@ def _has_flag(argv, name):
     return any(a == name or a.startswith(name + '=') for a in argv)
 
 
-def build_command(task, paths, extra_args=None):
+def build_command(task, paths, dataset_dir=None, extra_args=None):
     """把 md 中的命令替换为实际路径 (md 命令均已自带 --search_scope project).
 
+    dataset_dir: 指定时把命令中的 datasets/c_files/CSiBE-v2.1.1 数据集路径
+    替换为该目录, 缺省保持原路径.
     extra_args: [(开关名, 值), ...], 如 [('--opt-level', 'Os')]; 统一追加到
-    命令末尾透传给 ruyituner, md 命令中已带同名开关 (含 = 写法) 时不重复追加."""
+    命令末尾透传给 ruyituner, md 命令中已带同名开关 (含 = 写法) 时不重复追加.
+    未提供路径的架构跳过占位符替换 (只跑一个架构时其余路径为 None)."""
     line = task.cmd_line
-    line = line.replace(AARCH64_PLACEHOLDER, paths['aarch64'])
-    line = line.replace(RISCV_PLACEHOLDER, paths['riscv'])
-    line = line.replace(X86_PLACEHOLDER, paths['x86'])
+    for placeholder, key in ((AARCH64_PLACEHOLDER, 'aarch64'),
+                             (RISCV_PLACEHOLDER, 'riscv'),
+                             (X86_PLACEHOLDER, 'x86')):
+        if paths[key] is not None:
+            line = line.replace(placeholder, paths[key])
     line = line.replace(RUYITUNER_PLACEHOLDER, PROJECT_ROOT)
+    if dataset_dir is not None:
+        line = line.replace(DATASET_PLACEHOLDER, dataset_dir)
     argv = shlex.split(line)
     # md 命令头固定是 "python3 ruyituner.py", 换成当前解释器与脚本绝对路径;
     # -u 使 ruyituner 自身的 print 不缓冲: 其 stdout 接入管道时默认块缓冲,
@@ -296,6 +311,9 @@ def main():
                         choices=['x86', 'riscv', 'aarch64'], help='只跑一个架构')
     parser.add_argument('--projects', type=str, default=None,
                         help='只跑指定项目, 逗号分隔 (如 compiler,jpeg-6b)')
+    parser.add_argument('--dataset_dir', type=str, default=None,
+                        help='把 md 命令中的 datasets/c_files/CSiBE-v2.1.1 '
+                             '数据集路径替换为该目录 (缺省保持原路径)')
     parser.add_argument('--opt-level', type=str, default=None,
                         choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
                         help='追加到每条 ruyituner.py 命令的基线优化等级 (缺省不追加, 用 md 命令自带值)')
@@ -320,8 +338,15 @@ def main():
         print(f'[run_csibe] 未从 {args.md_file} 解析到任何命令, 终止.')
         sys.exit(1)
     tasks = [t for t in tasks if t.arch in archs]
+    skipped = sorted({t.project for t in tasks if t.project in SKIP_PROJECTS})
+    tasks = [t for t in tasks if t.project not in SKIP_PROJECTS]
+    if skipped:
+        print(f'[run_csibe] 跳过不参与运行的项目: {", ".join(skipped)}')
     if args.projects:
         wanted = {p.strip() for p in args.projects.split(',') if p.strip()}
+        ignored = sorted(wanted & SKIP_PROJECTS)
+        if ignored:
+            print(f'[run_csibe] --projects 中的 {", ".join(ignored)} 不参与运行, 已忽略.')
         tasks = [t for t in tasks if t.project in wanted]
     if not tasks:
         print('[run_csibe] 过滤后没有要运行的项目, 终止.')
@@ -338,7 +363,7 @@ def main():
     if args.dry_run:
         for t in tasks:
             print(f'  {t.project} ({t.arch}):',
-                  ' '.join(shlex.quote(a) for a in build_command(t, paths, extra_args)))
+                  ' '.join(shlex.quote(a) for a in build_command(t, paths, args.dataset_dir, extra_args)))
         print(f'[run_csibe] 汇总将写入: {args.output}')
         print(f'[run_csibe] 数据表格将写入: {args.data_output}')
         sys.exit(0)
@@ -354,7 +379,7 @@ def main():
         out_fh.write(f'# aarch64 工具链: {args.aarch64_path}\n\n')
         out_fh.flush()
         for t in tasks:
-            run_task(t, build_command(t, paths, extra_args), out_fh)
+            run_task(t, build_command(t, paths, args.dataset_dir, extra_args), out_fh)
     print(f'[run_csibe] 全部完成, 汇总已写入: {args.output}')
 
     # 从汇总文件中抽取数据生成表格 (原 scripts/extract_tuner_data.py 的功能)

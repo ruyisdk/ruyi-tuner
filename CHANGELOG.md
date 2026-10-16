@@ -152,4 +152,8 @@
 - scripts/extract_tuner_data.py 合并进 scripts/run_csibe.py：批量运行全部项目后自动从汇总文件中抽取各架构数据并生成制表符分隔的数据表格 output/CSiBE_data_summary.tsv（新增 --data_output 参数，默认名如前述；列为项目名称 + x86/riscv/aarch64 各三列并带合计行，口径与原脚本一致）；原独立脚本删除，Readme 删除“数据抽取辅助脚本”小节，批量运行脚本小节的说明、使用演示与参数列表相应更新（含三套工具链与 --data_output）。
 - 实际编译对比阶段的“按优化序列实际编译后总大小”标签改为“按优化序列实际编译后总大小（.ll 由 clang -<等级> 生成）”，注明前端 .ll 生成所用的 --ir-opt-level 优化等级（scripts/real_compile.py 屏幕输出与留存文件同步，留存函数新增对应参数）；scripts/run_csibe.py 的解析正则兼容新旧标签；Readme 输出说明与示例同步更新。
 - scripts/real_compile.py 新增本阶段数据留存：单个项目跑完后，把实际编译对比阶段的关键数据（阶段标题、基线大小、实际编译后总大小、缩减率及回退/失败信息）写入 output/Step3_<项目名>_<架构>_data.txt（项目名已含架构后缀，多架构结果互不覆盖，内容与屏幕输出一致），便于单项目运行后回看；Readme 项目结构树与相关阶段说明同步更新。
+- scripts/run_csibe.py 新增不参与运行的项目过滤：testdata 与 linux-2.4.23-pre3-testplatform 即使出现在 RunCSiBE.md 解析结果或 --projects 参数中也会被跳过并提示（testdata 为测试数据；linux 的 .c 文件几乎都不能被 clang 独立编译，RunCSiBE.md 已说明该目录不处理）。
+- 新增 scripts/run_csibe_auto.py：自动从 GitHub Release 下载 CSiBE v2.1.1 官方源码包到 output/csibe_cache/（output 已被 git 忽略，与仓库跟踪的 datasets/c_files/CSiBE-v2.1.1 分开），解压后的数据集放 output/csibe_cache/CSiBE-v2.1.1/（先清空再写入、与源码包完全一致；testdata 与 linux-2.4.23-pre3-testplatform 两个目录不解压；tar 已存在时跳过下载直接重新解压覆盖，--force 强制重下，--no_download 跳过下载与解压），再以项目根目录为工作目录调用 scripts/run_csibe.py 批量运行（自动把命令中的数据集路径替换为缓存目录，其余命令行参数原样透传，--dry_run 同样生效）；Readme 项目结构树与批量运行脚本小节同步更新。
+- scripts/run_csibe.py 新增 --dataset_dir 参数：把 RunCSiBE.md 命令中的 datasets/c_files/CSiBE-v2.1.1 数据集路径替换为指定目录（缺省不替换保持原路径），供 run_csibe_auto.py 把命令指向 output/csibe_cache/CSiBE-v2.1.1；Readme 参数说明同步更新。
+- 修复 scripts/run_csibe.py 中只跑一个架构（--only_arch）且未提供其余架构路径时 build_command 报错的问题：未提供的架构路径此前仍参与 str.replace，None 导致 TypeError；现改为路径为 None 的架构跳过占位符替换。
 

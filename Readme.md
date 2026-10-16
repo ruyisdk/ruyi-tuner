@@ -36,6 +36,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   │   └── riscv/       #   RISC-V架构: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
 │   └── c_files/         # C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
 ├── output/              # 各阶段输出结果
+│   ├── csibe_cache/                              # run_csibe_auto.py: 下载的官方源码包与解压后的数据集(不进 git)
 │   ├── Step1_<项目名>_<架构>_EnumeratedPairs.csv # 训练阶段: 枚举的所有协同对(项目名=目录名或单文件名, 架构取自数据集 .ll 的 target triple)
 │   ├── Step2_<项目名>_<架构>_PassList.csv         # 优化阶段(project模式): 找到的最优 pass 序列, 每行一个 pass
 │   ├── Step2_<项目名>_<架构>_Result.json          # 优化阶段(project模式): 基线/优化后大小与整体缩减率
@@ -55,6 +56,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
 │   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出, 并生成数据表格
+│   ├── run_csibe_auto.py # 自动下载CSiBE v2.1.1源码包并解压到output/csibe_cache/, 再调用run_csibe.py批量运行
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -314,9 +316,11 @@ CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.
 
 按 RunCSiBE.md 中列出的命令，用 x86 / RISC-V / AArch64 三套工具链批量运行 CSiBE 各 benchmark（project 模式），并生成两个输出文件：`output/CSiBE_Step3_summary.txt` 汇总每个项目的实际编译对比阶段（阶段 3/3）输出；全部项目跑完后自动从该汇总中抽取各架构的基线大小、实际编译后总大小与实际代码体积缩减率，生成制表符分隔的数据表格 `output/CSiBE_data_summary.tsv`（表格功能为原 scripts/extract_tuner_data.py 合并而来）。
 
-脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:`/`aarch64:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path`/`--aarch64_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录（md 命令均已自带 `--search_scope project`）；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入汇总文件（某次运行未产生该阶段时记录退出码与输出末尾）。
+脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:`/`aarch64:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path`/`--aarch64_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录（md 命令均已自带 `--search_scope project`）；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入汇总文件（某次运行未产生该阶段时记录退出码与输出末尾）。testdata 与 linux-2.4.23-pre3-testplatform 两个目录不参与运行（前者为测试数据，后者的 .c 文件几乎都不能被 clang 独立编译），解析后自动跳过，即使出现在 `--projects` 中也会忽略并提示。
 
 数据表格 `CSiBE_data_summary.tsv` 的列：项目名称 + x86/riscv/aarch64 各三列（基线大小、实际编译后总大小、实际代码体积缩减率，缩减率带 % 号）；末尾追加“合计”行，各架构分别求和，缩减率按 (1 − 实际编译后总大小合计 / 基线大小合计) 换算（保留两位小数，基线合计为 0 时留空）；汇总文件中只有项目名、没有编译结果的项目不写入。
+
+如需先自动准备数据集（下载官方源码包并解压），可改用 `scripts/run_csibe_auto.py`：先下载 `CSiBE-v2.1.1.tar.gz`（GitHub Release，缓存在 `output/csibe_cache/` 下，已存在时跳过下载直接重新解压覆盖，`--force` 强制重下，`--no_download` 跳过下载与解压），解压后的数据集放 `output/csibe_cache/CSiBE-v2.1.1/`（testdata 与 linux-2.4.23-pre3-testplatform 两个目录不解压），再以项目根目录为工作目录调用本脚本批量运行，并自动把命令中的数据集路径替换为缓存目录；仓库跟踪的 `datasets/c_files/CSiBE-v2.1.1` 不会被改动，其余命令行参数原样透传（`--x86_path`、`--only_arch`、`--dry_run` 等均可用）。
 
 **注意**：该脚本需在 ruyi-tuner 项目根目录（主目录）下运行；RunCSiBE.md 中的命令按项目根目录组织相对路径（`datasets/...`、`--c_flags` 的 `-Ixxx` 等），从其它目录运行会导致数据集路径等解析错误。
 
@@ -325,6 +329,12 @@ CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.
 ```bash
 # 用三套工具链批量运行 RunCSiBE.md 中的全部项目（自动生成汇总 txt 与数据表格 tsv）
 python3 scripts/run_csibe.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --riscv_path /llvm_dir/build-riscv/bin \
+    --aarch64_path /llvm_dir/build-aarch64/bin
+
+# 先自动下载 CSiBE v2.1.1 官方源码包并解压到 output/csibe_cache/, 再批量运行
+python3 scripts/run_csibe_auto.py \
     --x86_path /llvm_dir/build-x86/bin \
     --riscv_path /llvm_dir/build-riscv/bin \
     --aarch64_path /llvm_dir/build-aarch64/bin
@@ -350,6 +360,7 @@ python3 scripts/run_csibe.py \
 - `--data_output`: (可选) 数据表格输出文件（TSV），默认 `output/CSiBE_data_summary.tsv`
 - `--only_arch`: (可选) 只跑一个架构（x86/riscv/aarch64）
 - `--projects`: (可选) 只跑指定项目（逗号分隔项目名）
+- `--dataset_dir`: (可选) 把 RunCSiBE.md 命令中的 `datasets/c_files/CSiBE-v2.1.1` 数据集路径替换为该目录（缺省保持原路径；run_csibe_auto.py 会自动传入 `output/csibe_cache/CSiBE-v2.1.1`）
 - `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
 ## 注意事项
