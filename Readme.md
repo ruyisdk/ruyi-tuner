@@ -43,7 +43,9 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── <项目名>_<架构>/                           # 实际编译对比阶段: 按最优序列实际编译出的 .o 文件
 │   ├── Step3_<项目名>_<架构>_data.txt             # 实际编译对比阶段: 单项目跑完后留存的本阶段关键数据
 │   ├── CSiBE_Step3_summary.txt                    # run_csibe.py 批量运行后各项目阶段3/3输出的汇总
-│   └── CSiBE_data_summary.tsv                     # run_csibe.py 批量运行后自动生成的数据表格(各架构基线/实际编译后总大小/缩减率)
+│   ├── CSiBE_data_summary.tsv                     # run_csibe.py 批量运行后自动生成的数据表格(各架构基线/实际编译后总大小/缩减率)
+│   ├── CSiBE_build_summary.txt                    # run_csibe_build.py 批量运行后各项目实际编译对比阶段输出的汇总
+│   └── CSiBE_build_data.tsv                       # run_csibe_build.py 批量运行后自动生成的数据表格
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -57,6 +59,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
 │   ├── run_csibe.py     # 批量运行脚本：解析RunCSiBE.md并汇总CSiBE各项目实际编译对比(阶段3/3)输出, 并生成数据表格
 │   ├── run_csibe_auto.py # 自动下载CSiBE v2.1.1源码包并解压到output/csibe_cache/, 再调用run_csibe.py批量运行
+│   ├── run_csibe_build.py # 批量运行脚本：解析CSiBE各项目自带Makefile.in的编译配置, 生成三架构命令批量运行并汇总
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -361,6 +364,43 @@ python3 scripts/run_csibe.py \
 - `--only_arch`: (可选) 只跑一个架构（x86/riscv/aarch64）
 - `--projects`: (可选) 只跑指定项目（逗号分隔项目名）
 - `--dataset_dir`: (可选) 把 RunCSiBE.md 命令中的 `datasets/c_files/CSiBE-v2.1.1` 数据集路径替换为该目录（缺省保持原路径；run_csibe_auto.py 会自动传入 `output/csibe_cache/CSiBE-v2.1.1`）
+- `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
+
+### 8. CSiBE 构建配置批量运行脚本（scripts/run_csibe_build.py）
+
+运行 CSiBE v2.1.1 的另一条路径：不依赖 RunCSiBE.md 里写死的命令，直接解析每个项目源码目录下自带的 Makefile.in（CSiBE v2.1.1 官方构建系统的配置模板，与源码一起发布），展开其中的 `$(VAR)` 变量引用，从 CFLAGS 中提取编译宏（`-D`/`-U`）与头文件路径（`-I`）拼成 `--c_flags`，再为 x86 / RISC-V / AArch64 三套工具链分别构造 ruyituner 命令（均带 `--search_scope project`）批量运行，为每个项目找出最优 pass 序列。本脚本自成一体，不 import scripts/run_csibe.py 与 scripts/run_csibe_auto.py，外部脚本只以子进程方式调用 ruyituner.py；汇总与 TSV 数据表格逻辑自行实现，格式与 run_csibe.py 相同，默认文件名分别为 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`（与 RunCSiBE.md 路径的输出互不覆盖）。
+
+Makefile.in 解析规则：收集项目目录树下所有 Makefile.in 的 CFLAGS（部分项目顶层只是递归，真正的 CFLAGS 在子目录里）；`$(CCOPT)` 展开为空（优化等级由 `--opt-level` 决定）；`$(VPATH)` 展开为该 Makefile.in 所在目录，`-I` 相对路径按该目录解析为绝对路径（不存在的头文件目录丢弃并提示）；只保留 `-D`/`-U`/`-I` 参数（`-w`/`-ansi`/`-fno-builtin` 等不传给 ruyituner，`-ansi` 由统一的 `--c_std gnu89` 代替），重复参数去重。
+
+架构差异：aarch64 命令在 `--c_flags` 中追加 `--target=aarch64-unknown-linux-gnu`（交叉工具链的 clang 默认 triple 为 unknown，必须显式指定）；riscv 的 libmspack 追加 `--sysroot`（默认 `/opt/riscv/sysroot`，可经 `--riscv_sysroot` 修改、置空关闭，`--riscv_sysroot_projects` 调整应用的项目列表），其余项目与 x86 相同。
+
+数据集准备与 run_csibe_auto.py 相同：默认先下载官方源码包并解压到 `output/csibe_cache/CSiBE-v2.1.1/`（`--no_download` 跳过下载与解压，`--force` 强制重下，`--tar_path` 指定缓存路径）；也可用 `--dataset_dir` 指向其它副本（仓库跟踪的 `datasets/c_files/CSiBE-v2.1.1` 各项目目录同样自带 Makefile.in，可直接使用）。
+
+**使用演示：**
+
+```bash
+# 下载源码包并解压后, 用三套工具链按 Makefile.in 编译配置批量运行全部项目
+python3 scripts/run_csibe_build.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --riscv_path /llvm_dir/build-riscv/bin \
+    --aarch64_path /llvm_dir/build-aarch64/bin
+
+# 跳过下载, 直接用仓库跟踪的数据集跑 x86
+python3 scripts/run_csibe_build.py \
+    --x86_path /llvm_dir/build-x86/bin \
+    --only_arch x86 \
+    --no_download --dataset_dir datasets/c_files/CSiBE-v2.1.1
+```
+
+**参数说明：**
+- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 工具链目录（含 opt/clang/llc 等）；只跑一个架构时未用到的路径可不提供
+- `--only_arch`: (可选) 只跑一个架构（x86/riscv/aarch64）
+- `--projects`: (可选) 只跑指定项目（逗号分隔项目名，共 17 个，见 RunCSiBE.md）
+- `--dataset_dir`: (可选) 数据集根目录（含各项目子目录，缺省 `output/csibe_cache/CSiBE-v2.1.1`）
+- `--tar_path`/`--force`/`--no_download`: (可选) 源码包缓存路径/已存在仍强制重下/跳过下载与解压
+- `--riscv_sysroot`/`--riscv_sysroot_projects`: (可选) riscv 需要 glibc 头文件的项目追加的 `--sysroot` 路径（默认 `/opt/riscv/sysroot`，置空关闭）及应用该参数的项目列表（逗号分隔，默认 `libmspack`）
+- `--opt-level`/`--ir-opt-level`: (可选) 追加到每条 ruyituner 命令的基线优化等级/C→IR 转换优化等级（缺省不追加）
+- `--output`/`--data_output`: (可选) 汇总输出文件/数据表格输出文件（TSV），默认 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`
 - `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
 ## 注意事项
