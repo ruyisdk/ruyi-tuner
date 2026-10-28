@@ -8,7 +8,7 @@
 
 用法:
   python3 scripts/real_compile.py --project_name <项目名> --output_dir <目录> \
-      --cache_dir <IR缓存目录> --llvm_tools_path <目录> --opt_level Os --ir_opt_level Oz \
+      --cache_dir <IR缓存目录> --opt_tools_path <目录> --opt_level Os --ir_opt_level Oz \
       [--c_std gnu89] [--c_flags '-DHAVE_CONFIG_H'] [--num_workers 16] [--total_stages 3]
 """
 
@@ -32,7 +32,7 @@ sys.path.append(project_root)
 from utils.common import find_clang, fix_loop_nesting, get_object_file_text_size
 
 
-def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
+def real_compile_with_seq(src_root, ll_items, obj_dir, clang, opt_tools_path,
                           seq, ir_opt_level, c_std=None, c_flags=None, num_workers=16):
     """把 GA 找到的最优 pass 序列实际应用到源码编译, 生成 .o 到 obj_dir 下.
 
@@ -42,7 +42,7 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
     任一环节失败时回退 clang -<ir_opt_level> -c 直通编译 (ir_opt_level 为
     C→IR 转换的优化等级, 与缓存 IR 的前端等级一致, 而非基线优化等级);
     返回 (总 .text 字节数, 回退直通编译的文件数, 编译失败列表)."""
-    bin_dir = llvm_tools_path or ''
+    bin_dir = opt_tools_path or ''
     opt_path = os.path.join(bin_dir, 'opt') if bin_dir else 'opt'
     llc_path = os.path.join(bin_dir, 'llc') if bin_dir else 'llc'
     # loop(...) 元素按评分口径嵌套进最近的 function(...) 后才能交给 opt
@@ -64,7 +64,7 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
                                        '-filetype=obj', opt_ll, '-o', dst],
                                       capture_output=True, text=True)
                 if proc.returncode == 0:
-                    size = get_object_file_text_size(dst, llvm_tools_path)
+                    size = get_object_file_text_size(dst, opt_tools_path)
                     if size is not None:
                         return rel, size, ''
             # 序列管线失败: 回退 clang 直通编译 (用 C→IR 转换的优化等级, 保证构建产物完整)
@@ -79,7 +79,7 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, llvm_tools_path,
             if proc.returncode != 0:
                 lines = [line for line in proc.stderr.splitlines() if line.strip()]
                 return rel, None, lines[-1] if lines else f'exit={proc.returncode}'
-            size = get_object_file_text_size(dst, llvm_tools_path)
+            size = get_object_file_text_size(dst, opt_tools_path)
             if size is None:
                 return rel, None, 'llvm-size 解析失败'
             return rel, size, '回退直通编译'
@@ -139,8 +139,8 @@ def main():
                         help='输出目录 (含前一步写出的 PassList 与 Result 文件)')
     parser.add_argument('--cache_dir', type=str, required=True,
                         help='C→IR 阶段的 IR 缓存目录 (含 baseline_manifest.json)')
-    parser.add_argument('--llvm_tools_path', type=str, required=True,
-                        help='LLVM 工具链路径')
+    parser.add_argument('--opt_tools_path', type=str, required=True,
+                        help='优化工具链路径 (clang/opt/llc 三段过程使用, 由 ruyituner.py 传入)')
     parser.add_argument('--opt_level', type=str, default='Oz',
                         help='基线编译的优化等级 (仅用于输出标签, 说明基线来源), 默认 Oz')
     parser.add_argument('--ir_opt_level', type=str, default='Oz',
@@ -207,7 +207,7 @@ def main():
     if not ll_items:
         print('[ruyituner] 缓存目录中没有可用的 .ll 文件, 跳过实际编译对比.')
         return
-    clang = find_clang(args.llvm_tools_path)
+    clang = find_clang(args.opt_tools_path)
     if clang is None:
         print('[ruyituner] 未找到 clang, 跳过实际编译对比.')
         return
@@ -217,7 +217,7 @@ def main():
     print(f'[ruyituner] .o 输出目录: {obj_dir}')
     print('=' * 60)
     total_text, fallback, failures = real_compile_with_seq(
-        src_root, ll_items, obj_dir, clang, args.llvm_tools_path, seq,
+        src_root, ll_items, obj_dir, clang, args.opt_tools_path, seq,
         args.ir_opt_level, args.c_std, args.c_flags, args.num_workers)
     print(f'[ruyituner] clang -{args.opt_level} 基线大小 (来自前一步 GA 输出): {int(baseline)}')
     print(f'[ruyituner] 按优化序列实际编译后总大小（.ll 由 clang -{args.ir_opt_level} 生成）: {total_text}')

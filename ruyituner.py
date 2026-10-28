@@ -15,35 +15,44 @@ ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目�
 各输出名中的 <架构> (x86/riscv/aarch64) 取自数据集 .ll 内嵌 target triple;
 项目名本身已含架构名或取不到架构时不追加, 保证多架构的数据互不覆盖.
 
+两个工具链: --baseline_tools_path 为基线工具链, 用于基线的直接编译/统计
+(obj-size 口径下 clang -O<level> -c 编译源码成 .o, 其余口径用其 opt 计算基线);
+--opt_tools_path 为优化工具链, 用于 clang/opt/llc 三段过程 (C→IR 转换、训练、
+GA 评分与实际编译对比), 缺省与基线工具链相同.
+
 用法示例:
   # 完整流程 (训练 + 优化)
-  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --baseline_tools_path ../llvm_dir/build/bin
 
   # 仅训练 (不优化)
-  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_train
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --baseline_tools_path ../llvm_dir/build/bin --only_train
 
   # 仅优化 (需要已有 Step1_<项目名>_<架构>_EnumeratedPairs.csv, 如 x86 数据集对应 Step1_x86_EnumeratedPairs.csv)
-  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --llvm_tools_path ../llvm_dir/build/bin --only_run \
+  python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --baseline_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step1_x86_EnumeratedPairs.csv
 
   # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--ir-opt-level优化等级生成.ll到缓存目录,
   # 缺省与基线优化等级--opt-level一致; 流程结束自动清理)
-  python3 ruyituner.py --dataset datasets/c_files --input_type c --llvm_tools_path ../llvm_dir/build/bin
+  python3 ruyituner.py --dataset datasets/c_files --input_type c --baseline_tools_path ../llvm_dir/build/bin
 
   # --input_type c 搭配 --count_mode obj-size 时, 评分基线直接用 clang -O<level> -c
   # 编译源码统计 .o 大小 (真实编译口径), 不再经过 C→IR→opt 中间过程
 
   # 预处理后的 C 源码 (.i) 数据集, 如 CSiBE 的 lwip-0.5.3.preproc (旧式代码需 --c_std gnu89)
   python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc --input_type c \
-      --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
+      --baseline_tools_path ../llvm_dir/build/bin --c_std gnu89
 
   # 旧式 C 代码 (K&R/C89, 如 CSiBE 的 compiler 基准) 需通过 --c_std 指定 C 标准, 否则隐式函数声明报错
   python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler --input_type c \
-      --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89
+      --baseline_tools_path ../llvm_dir/build/bin --c_std gnu89
 
   # 依赖自定义编译宏的项目 (如 flex 需 -DHAVE_CONFIG_H) 可通过 --c_flags 追加 clang 参数
   python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 --input_type c \
-      --llvm_tools_path ../llvm_dir/build/bin --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
+      --baseline_tools_path ../llvm_dir/build/bin --c_std gnu89 --c_flags '-DHAVE_CONFIG_H'
+
+  # 基线工具链与优化工具链分开: 基线 .o 用默认构建编译, clang/opt/llc 三段过程用统计构建
+  python3 ruyituner.py --dataset datasets/c_files --input_type c \
+      --baseline_tools_path ../llvm_dir/build/bin --opt_tools_path ../llvm_dir/build-stat/bin
 """
 
 import argparse
@@ -72,7 +81,8 @@ def build_train_cmd(args, dataset, project_name):
     """根据命令行参数构造 train.py 的命令."""
     cmd = [sys.executable, TRAIN_SCRIPT,
            '--dataset', dataset,
-           '--llvm_tools_path', args.llvm_tools_path,
+           # 训练 (pass 枚举) 属于优化过程, 用优化工具链
+           '--opt_tools_path', args.opt_tools_path,
            '--num_workers', str(args.num_workers),
            '--count_mode', args.count_mode,
            '--project_name', project_name]
@@ -256,7 +266,8 @@ def build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name)
            '--project_name', project_name,
            '--output_dir', out_dir,
            '--cache_dir', cache_dir,
-           '--llvm_tools_path', args.llvm_tools_path,
+           # 实际编译对比 (clang/opt/llc 三段过程) 用优化工具链
+           '--opt_tools_path', args.opt_tools_path,
            '--opt_level', args.opt_level,
            # 回退直通编译用 C→IR 转换的优化等级 (缺省与 --opt-level 一致)
            '--ir_opt_level', args.ir_opt_level or args.opt_level,
@@ -283,8 +294,12 @@ def main():
                         help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
     parser.add_argument('--c_flags', type=str, default=None,
                         help='传给 clang 的额外编译参数, 如 -DHAVE_CONFIG_H (可选, 仅 --input_type c 生效; 支持空格分隔多个)')
-    parser.add_argument('--llvm_tools_path', type=str, required=True,
-                        help='LLVM工具链路径，包含opt')
+    parser.add_argument('--baseline_tools_path', type=str, default=None,
+                        help='基线工具链路径: 用于基线的直接编译/统计 (obj-size 口径下 clang -O<level> -c 编译源码成 .o, 其余口径用其 opt 计算基线); 缺省同时作为优化工具链')
+    parser.add_argument('--llvm_tools_path', type=str, default=None,
+                        help=argparse.SUPPRESS)  # 旧名, 兼容保留 (RunCSiBE.md 等旧命令仍可用)
+    parser.add_argument('--opt_tools_path', type=str, default=None,
+                        help='优化工具链路径: 用于 clang/opt/llc 三段过程 (C→IR 转换、训练、GA 评分与实际编译对比), 缺省与 --baseline_tools_path (基线工具链) 相同')
     parser.add_argument('--output_dir', type=str, default=None,
                         help='训练输出目录, 默认 <项目根目录>/output')
     parser.add_argument('--passfile', type=str, default=None,
@@ -337,10 +352,21 @@ def main():
     if args.only_train and args.only_run:
         parser.error('--only_train 与 --only_run 不能同时使用')
 
+    # --llvm_tools_path 为旧名, 兼容保留 (RunCSiBE.md 等旧命令仍可用)
+    if args.baseline_tools_path is None:
+        if args.llvm_tools_path is None:
+            parser.error('缺少 --baseline_tools_path (旧名 --llvm_tools_path 已更名)')
+        args.baseline_tools_path = args.llvm_tools_path
+
+    # 优化工具链缺省与基线工具链相同
+    args.opt_tools_path = args.opt_tools_path or args.baseline_tools_path
+
     print('=' * 60)
     print(f'[ruyituner] 输入文件类型: {args.input_type}')
     print(f'[ruyituner] 计数方式: {args.count_mode}')
     print(f'[ruyituner] 寻找优化序列的范围: {args.search_scope}')
+    if args.opt_tools_path != args.baseline_tools_path:
+        print(f'[ruyituner] 工具链: 基线 {args.baseline_tools_path} / 优化 {args.opt_tools_path}')
     print('=' * 60)
 
     # C 输入 + 项目模式时, GA 优化之后还有实际编译对比阶段
@@ -350,9 +376,10 @@ def main():
 
     cache_dir = None
     if args.input_type == 'c':
-        clang = find_clang(args.llvm_tools_path)
+        # C→IR 转换是 clang/opt/llc 三段过程的第一段, 用优化工具链的 clang
+        clang = find_clang(args.opt_tools_path)
         if clang is None:
-            print('[ruyituner] 未找到 clang: --llvm_tools_path 与系统 PATH 中均无可用 clang, 终止.')
+            print('[ruyituner] 未找到 clang: 优化工具链 (--opt_tools_path) 与系统 PATH 中均无可用 clang, 终止.')
             sys.exit(1)
         # C→IR 转换的优化等级: --ir-opt-level 缺省时与基线优化等级 --opt-level 一致
         ir_opt_level = args.ir_opt_level or args.opt_level
@@ -403,7 +430,9 @@ def main():
                 sys.exit(1)
             run_cmd = [sys.executable, RUN_SCRIPT,
                        '--dataset', dataset,
-                       '--llvm_tools_path', args.llvm_tools_path,
+                       # 基线计算用基线工具链, 序列评分 (opt/llc) 用优化工具链
+                       '--baseline_tools_path', args.baseline_tools_path,
+                       '--opt_tools_path', args.opt_tools_path,
                        '--paircsv', paircsv,
                        '--opt-level', args.opt_level,
                        '--count_mode', args.count_mode,

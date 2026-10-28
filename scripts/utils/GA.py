@@ -4,16 +4,20 @@ from utils.common import get_c_object_size, get_instrcount
 
 
 def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
-                      baseline_src=None, label=''):
+                      baseline_src=None, label='', baseline_tools_path=None):
     '''计算单个文件的基线大小.
 
     baseline_src 非 None 且计数方式为 obj-size 时 (即 C 输入场景), 基线改为
     直接用 clang -O<level> -c 把 C 源码编译为 .o 并统计 .text 大小, 与真实
     编译口径一致; clang 编译失败时回退 IR 口径基线. 其余情况维持原口径:
-    用 opt -O<level> 优化 O0 级 IR 后计数/测大小.'''
+    用 opt -O<level> 优化 O0 级 IR 后计数/测大小.
+
+    llvm_tools_path 为优化工具链 (候选序列评分用), baseline_tools_path 为
+    基线工具链 (基线计算全程使用, 缺省与优化工具链相同).'''
+    base_tools = baseline_tools_path or llvm_tools_path
     if baseline_src and count_mode == 'obj-size':
         size = get_c_object_size(
-            baseline_src['src'], llvm_tools_path, opt_level=opt_level,
+            baseline_src['src'], base_tools, opt_level=opt_level,
             c_std=baseline_src.get('c_std'),
             c_flags=baseline_src.get('c_flags'),
             cwd=baseline_src.get('src_root'))
@@ -21,7 +25,7 @@ def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
             return size
         name = f' ({label})' if label else ''
         print(f'[baseline] clang -{opt_level} -c 直接编译失败, 回退 IR 口径基线{name}.')
-    return get_instrcount(ll_code, [f'-{opt_level}'], llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+    return get_instrcount(ll_code, [f'-{opt_level}'], tools_path=base_tools, count_mode=count_mode)
 
 
 def _ga_search(graph, nodes, fitness_function, population_size=100, generations=10,
@@ -140,11 +144,13 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
 
 
-def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_src=None):
+def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_src=None, baseline_tools_path=None):
         # 基线: C 输入(obj-size 计数)时直接用 clang -O<level> -c 编译源码统计 .o,
-        # 否则按用户指定的优化等级(opt_level, 默认Oz)优化 O0 级 IR 后计数/测大小
+        # 否则按用户指定的优化等级(opt_level, 默认Oz)优化 O0 级 IR 后计数/测大小;
+        # 基线计算用 baseline_tools_path (缺省同优化工具链), 序列评分用 llvm_tools_path
         baseline_count = _compute_baseline(ll_code, llvm_tools_path, opt_level,
-                                           count_mode, baseline_src)
+                                           count_mode, baseline_src,
+                                           baseline_tools_path=baseline_tools_path)
         if(baseline_count == 0):
             # 基线大小为 0 时只提示跳过, 不再打印整个 .ll 文件内容 (文件名已由调用方打印);
             # obj-size 口径下通常为纯数据文件 (如 bzip2 的 randtable.c, .o 的 .text 为 0 字节)
@@ -171,7 +177,7 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
 
         # 单文件适应度: 相对指定优化等级基线的缩减比例
         def fitness_function(path):
-            score = (baseline_count - get_instrcount(ll_code, path, llvm_tools_path=llvm_tools_path, count_mode=count_mode)) / baseline_count
+            score = (baseline_count - get_instrcount(ll_code, path, tools_path=llvm_tools_path, count_mode=count_mode)) / baseline_count
             return score, path
 
         best_cost, best_path = _ga_search(graph, nodes, fitness_function,
@@ -190,10 +196,12 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         return best_path, best_cost, baseline_count, after_count
 
 
-def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_srcs=None):
+def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_srcs=None, baseline_tools_path=None):
     """为项目(全部输入文件)寻找一条公共的最优 pass 序列 (聚合适应度 GA).
 
     file_codes: [(文件名, .ll 源码), ...];
+    llvm_tools_path 为优化工具链 (序列评分用), baseline_tools_path 为基线
+    工具链 (基线计算用, 缺省与优化工具链相同);
     baseline_srcs: 与 file_codes 对齐的 C 源文件信息列表 (C 输入时由 run.py
     从基线清单查得), 逐文件传给基线计算, 未匹配到源文件的元素为 None;
     适应度 = (Σ基线 - Σ优化后) / Σ基线, 即按文件大小加权的整体缩减率,
@@ -208,7 +216,8 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     bases = []
     for (name, ll_code), baseline_src in zip(file_codes, baseline_srcs):
         base = _compute_baseline(ll_code, llvm_tools_path, opt_level,
-                                 count_mode, baseline_src, label=name)
+                                 count_mode, baseline_src, label=name,
+                                 baseline_tools_path=baseline_tools_path)
         if base == 0:
             print(f"{name}: {opt_level} 基线为 0, 跳过该文件.")
             continue
@@ -251,7 +260,7 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
             cached = size_cache.get(key)
         if cached is not None:
             return cached
-        size = get_instrcount(codes[index], list(path), llvm_tools_path=llvm_tools_path, count_mode=count_mode)
+        size = get_instrcount(codes[index], list(path), tools_path=llvm_tools_path, count_mode=count_mode)
         with cache_lock:
             size_cache[key] = size
         return size

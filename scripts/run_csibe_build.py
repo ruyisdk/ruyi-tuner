@@ -38,6 +38,9 @@ Makefile.in 解析规则:
   跳过下载与解压:    追加 --no_download (直接用现有缓存目录运行)
   指定数据集目录:    追加 --dataset_dir <目录> (缺省 output/csibe_cache/CSiBE-v2.1.1,
                      可指向 datasets/c_files/CSiBE-v2.1.1 等其它副本)
+  优化工具链与基线分开: 追加 --opt_x86_path/--opt_riscv_path/--opt_aarch64_path
+                     (对应架构命令追加 --opt_tools_path, 缺省不追加, 由 ruyituner
+                     用基线工具链)
 
 本脚本自成一体: 源码包下载/解压、任务运行/汇总与 TSV 数据表格的逻辑都在本文件内
 实现, 不 import scripts/run_csibe.py 与 scripts/run_csibe_auto.py; 外部脚本只以
@@ -303,11 +306,14 @@ def extract_stage3(lines):
 
 
 def build_command(project, arch, paths, dataset_root, flags,
-                  riscv_sysroot, sysroot_projects, extra_args):
-    """为一个项目拼出一条 ruyituner 命令 (--search_scope project 模式)."""
+                  riscv_sysroot, sysroot_projects, extra_args, opt_paths=None):
+    """为一个项目拼出一条 ruyituner 命令 (--search_scope project 模式).
+
+    opt_paths: {架构: 优化工具链路径}; 指定架构时在命令末尾追加
+    --opt_tools_path (基线工具链与优化工具链分开), 未提供时则不追加."""
     argv = [sys.executable, '-u', RUYITUNER_PY,
             '--dataset', os.path.join(dataset_root, project),
-            '--llvm_tools_path', paths[arch],
+            '--baseline_tools_path', paths[arch],
             '--count_mode', 'obj-size',
             '--input_type', 'c',
             '--c_std', 'gnu89',
@@ -323,6 +329,9 @@ def build_command(project, arch, paths, dataset_root, flags,
     for flag, value in extra_args:
         if not _has_flag(argv, flag):
             argv += [flag, value]
+    if opt_paths and opt_paths.get(arch):
+        if not _has_flag(argv, '--opt_tools_path'):
+            argv += ['--opt_tools_path', opt_paths[arch]]
     return argv
 
 
@@ -485,11 +494,20 @@ def main():
                     '生成并批量运行 x86/RISC-V/AArch64 的 ruyituner 命令',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--x86_path', type=str, default=None,
-                        help='x86 工具链 bin 目录')
+                        help='x86 基线工具链 bin 目录')
     parser.add_argument('--riscv_path', type=str, default=None,
-                        help='RISC-V 工具链 bin 目录')
+                        help='RISC-V 基线工具链 bin 目录')
     parser.add_argument('--aarch64_path', type=str, default=None,
-                        help='AArch64 工具链 bin 目录')
+                        help='AArch64 基线工具链 bin 目录')
+    parser.add_argument('--opt_x86_path', type=str, default=None,
+                        help='x86 优化工具链 bin 目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
+    parser.add_argument('--opt_riscv_path', type=str, default=None,
+                        help='RISC-V 优化工具链 bin 目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
+    parser.add_argument('--opt_aarch64_path', type=str, default=None,
+                        help='AArch64 优化工具链 bin 目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
     parser.add_argument('--only_arch', type=str, default=None,
                         choices=['x86', 'riscv', 'aarch64'], help='只跑一个架构')
     parser.add_argument('--projects', type=str, default=None,
@@ -541,11 +559,15 @@ def main():
     archs = [args.only_arch] if args.only_arch else ['x86', 'riscv', 'aarch64']
     paths = {'x86': args.x86_path, 'riscv': args.riscv_path,
              'aarch64': args.aarch64_path}
+    opt_paths = {'x86': args.opt_x86_path, 'riscv': args.opt_riscv_path,
+                 'aarch64': args.opt_aarch64_path}
     for arch in archs:
         if not paths[arch]:
             parser.error(f'缺少 {arch} 工具链路径 (--{arch}_path)')
         if not os.path.isdir(paths[arch]):
             print(f'[run_csibe_build] 警告: {arch} 工具链目录不存在: {paths[arch]}')
+        if opt_paths[arch] and not os.path.isdir(opt_paths[arch]):
+            print(f'[run_csibe_build] 警告: {arch} 优化工具链目录不存在: {opt_paths[arch]}')
 
     # 项目选择与检查
     projects = list(CSIBE_V211_PROJECTS)
@@ -581,7 +603,8 @@ def main():
               f'{" ".join(flags) if flags else "(无 -D/-I 参数)"}')
         for arch in archs:
             argv = build_command(project, arch, paths, dataset_root, flags,
-                                 args.riscv_sysroot, sysroot_projects, extra_args)
+                                 args.riscv_sysroot, sysroot_projects, extra_args,
+                                 opt_paths)
             tasks.append(Task(project, arch, argv))
 
     print(f'[run_csibe_build] 共 {len(tasks)} 条命令 (项目数: {len(projects)})')
@@ -601,9 +624,12 @@ def main():
                      '(编译参数取自各项目 Makefile.in)\n')
         out_fh.write(f'# 生成时间: {time.strftime("%Y-%m-%d %H:%M:%S")}\n')
         out_fh.write(f'# 数据集根目录: {dataset_root}\n')
-        out_fh.write(f'# x86 工具链: {args.x86_path}\n')
-        out_fh.write(f'# riscv 工具链: {args.riscv_path}\n')
-        out_fh.write(f'# aarch64 工具链: {args.aarch64_path}\n')
+        out_fh.write(f'# x86 工具链: {args.x86_path} (优化: '
+                     f'{args.opt_x86_path or "同基线"})\n')
+        out_fh.write(f'# riscv 工具链: {args.riscv_path} (优化: '
+                     f'{args.opt_riscv_path or "同基线"})\n')
+        out_fh.write(f'# aarch64 工具链: {args.aarch64_path} (优化: '
+                     f'{args.opt_aarch64_path or "同基线"})\n')
         out_fh.write(f'# riscv --sysroot: {args.riscv_sysroot or "(未使用)"} '
                      f'(项目: {", ".join(sorted(sysroot_projects)) or "无"})\n')
         for project in projects:

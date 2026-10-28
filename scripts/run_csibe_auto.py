@@ -24,6 +24,10 @@
   只看将执行的命令:  追加 --dry_run (下载与解压仍会先完成, 只是不真正执行)
   已下载仍重下:      追加 --force
   跳过下载与解压:    追加 --no_download (直接用缓存目录运行)
+  工具链:            追加 --x86_path/--riscv_path/--aarch64_path (基线) 与
+                     --opt_x86_path/--opt_riscv_path/--opt_aarch64_path (优化,
+                     缺省同基线; 均透传给 run_csibe.py, 对应架构命令自动追加
+                     --opt_tools_path)
 """
 
 import argparse
@@ -49,6 +53,16 @@ URL = ('https://github.com/szeged/csibe/releases/download/'
 # 不同步也不参与运行: testdata 为测试数据; linux-2.4.23-pre3-testplatform 的
 # .c 文件几乎都不能被 clang 独立编译 (RunCSiBE.md 已说明该目录不处理)
 SKIP_DIRS = {'testdata', 'linux-2.4.23-pre3-testplatform'}
+
+# 每个架构两个工具链 (基线/优化), 显式声明后透传给 run_csibe.py
+TOOLCHAIN_ARGS = [
+    ('--x86_path', 'x86_path'),
+    ('--riscv_path', 'riscv_path'),
+    ('--aarch64_path', 'aarch64_path'),
+    ('--opt_x86_path', 'opt_x86_path'),
+    ('--opt_riscv_path', 'opt_riscv_path'),
+    ('--opt_aarch64_path', 'opt_aarch64_path'),
+]
 
 
 def download_tarball(tar_path, force):
@@ -154,10 +168,30 @@ def main():
                         help='源码包已存在时仍强制重新下载')
     parser.add_argument('--no_download', action='store_true',
                         help='跳过下载与解压, 直接用现有缓存目录调用 run_csibe.py')
-    # 其余参数 (--x86_path/--riscv_path/--aarch64_path/--only_arch/--projects/
-    # --opt-level/--ir-opt-level/--output/--data_output/--dry_run 等)
-    # 原样透传给 scripts/run_csibe.py
+    parser.add_argument('--x86_path', type=str, default=None,
+                        help='x86 基线工具链目录 (透传给 run_csibe.py)')
+    parser.add_argument('--riscv_path', type=str, default=None,
+                        help='RISC-V 基线工具链目录 (透传给 run_csibe.py)')
+    parser.add_argument('--aarch64_path', type=str, default=None,
+                        help='AArch64 基线工具链目录 (透传给 run_csibe.py)')
+    parser.add_argument('--opt_x86_path', type=str, default=None,
+                        help='x86 优化工具链目录 (透传给 run_csibe.py, '
+                             '对应架构命令自动追加 --opt_tools_path)')
+    parser.add_argument('--opt_riscv_path', type=str, default=None,
+                        help='RISC-V 优化工具链目录 (透传给 run_csibe.py, '
+                             '对应架构命令自动追加 --opt_tools_path)')
+    parser.add_argument('--opt_aarch64_path', type=str, default=None,
+                        help='AArch64 优化工具链目录 (透传给 run_csibe.py, '
+                             '对应架构命令自动追加 --opt_tools_path)')
+    # 其余参数 (--only_arch/--projects/--opt-level/--ir-opt-level/
+    # --output/--data_output/--dry_run 等) 原样透传给 scripts/run_csibe.py
     args, run_args = parser.parse_known_args()
+
+    # 6 个工具链参数显式声明在 argparse (--help 可见), 收集后与其余参数一起透传
+    for flag, attr in TOOLCHAIN_ARGS:
+        value = getattr(args, attr)
+        if value is not None:
+            run_args += [flag, value]
 
     if not args.no_download:
         download_tarball(args.tar_path, args.force)

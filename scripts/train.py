@@ -6,13 +6,13 @@
 
 用法:
   # 训练流程 (--dataset 必选; --output_dir 可选, 缺省为项目根目录下的 output/)
-  python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> [--output_dir <dir>] --passfile <file>
+  python3 scripts/train.py --dataset <dir> --opt_tools_path <dir> [--output_dir <dir>] --passfile <file>
 
   # 未提供 --passfile 时自动生成 pass 列表后开始训练 (默认不写txt文件, 除非指定 --passlist_output)
-  python3 scripts/train.py --dataset <dir> --llvm_tools_path <dir> --output_dir <dir>
+  python3 scripts/train.py --dataset <dir> --opt_tools_path <dir> --output_dir <dir>
 
   # 仅生成 pass 列表, 不训练 (此时 --dataset/--output_dir 可不提供)
-  python3 scripts/train.py --gen_passlist_only --llvm_tools_path <dir> [--passlist_output <文件>]
+  python3 scripts/train.py --gen_passlist_only --opt_tools_path <dir> [--passlist_output <文件>]
 """
 
 import sys
@@ -183,7 +183,7 @@ def generate_passlist(args, write_default=True):
     - --passlist_output 指定时写入该文件;
     - 未指定时: write_default=True(仅生成模式)写入默认文件 passes_<版本>.txt,
       write_default=False(训练模式)不写文件, 直接返回列表供训练使用."""
-    opt_path = os.path.join(args.llvm_tools_path, 'opt')
+    opt_path = os.path.join(args.opt_tools_path, 'opt')
     if not os.path.isfile(opt_path):
         raise SystemExit(f'找不到 opt 二进制: {opt_path}')
 
@@ -288,7 +288,7 @@ gen_only = '--gen_passlist_only' in sys.argv
 
 args = ap.ArgumentParser()
 args.add_argument("--dataset", type=str, required=not gen_only, help="Dataset path for training: directory containing .ll files or a single .ll file (required for training)")
-args.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
+args.add_argument("--opt_tools_path", type=str, required=True, help="optimization toolchain path (LLVM binary files): used for pass enumeration and training")
 args.add_argument("--output_dir", type=str, default=None, help="output file path; if not provided, defaults to <project_root>/output and is created automatically")
 args.add_argument("--num_workers", type=int, default=16, help="number of workers for parallel processing")
 args.add_argument("--passfile", type=str, default=None, help="the pass list to be used for synergistic pair finding, e.g., llvm21_1_8 or llvm18_1_6; if not provided, it will be automatically generated")
@@ -313,7 +313,7 @@ if args.output_dir is None:
     os.makedirs(args.output_dir, exist_ok=True)
     print(f'未指定 --output_dir, 使用默认输出目录: {args.output_dir}')
 
-print("计数方式:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
+print("计数方式:", get_inst_count_method(args.opt_tools_path, count_mode=args.count_mode))
 
 # 查找协同 pass 对: 结果不再落盘, 在内存中直接用于后续的枚举去重
 
@@ -335,9 +335,9 @@ else:
         for f in files:
             if f.endswith('.ll'):
                 dataset_files.append(os.path.join(root, f))
-check_dataset_arch_matches_opt(dataset_files, os.path.join(args.llvm_tools_path, 'opt'))
+check_dataset_arch_matches_opt(dataset_files, os.path.join(args.opt_tools_path, 'opt'))
 
-syner = PassSyner(args.dataset, args.llvm_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
+syner = PassSyner(args.dataset, args.opt_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
 results = syner.FindSynerPasses()
 
 # 枚举所有文件找到的协同对并去重, 写入 Step1 CSV (命名含数据集名)

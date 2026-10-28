@@ -16,7 +16,7 @@ class PassSyner:
             ll_code = ll_file.read()
         print("Processing:", filepath)
 
-        original_codesize = get_instrcount(ll_code, [], llvm_tools_path=self.llvm_tools_path, count_mode=self.count_mode)
+        original_codesize = get_instrcount(ll_code, [], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
         syner_passpairs = []
         action_aval = []
 
@@ -24,7 +24,7 @@ class PassSyner:
 
         # find valid passes
         for action in self.Passes:
-            action_ic = get_instrcount(ll_code, [action], llvm_tools_path=self.llvm_tools_path, count_mode=self.count_mode)
+            action_ic = get_instrcount(ll_code, [action], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
             sinpass_ic.update({action: action_ic})
             code_size_change = original_codesize - action_ic
             if code_size_change > 0:
@@ -33,7 +33,7 @@ class PassSyner:
         for action2 in action_aval:
             for action1 in self.Passes:
                 code_size_org = sinpass_ic.get(action2)
-                code_size_now = get_instrcount(ll_code, [action1, action2], llvm_tools_path=self.llvm_tools_path, count_mode=self.count_mode)
+                code_size_now = get_instrcount(ll_code, [action1, action2], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
                 code_size_change = code_size_org - code_size_now
                 if code_size_change > 0:
                     syner_passpairs.append((action1, action2))

@@ -24,6 +24,9 @@ aarch64/bin) 替换为实际路径, /home/XXX/ruyi-tuner 替换为本项目根�
   只看将执行的命令:  追加 --dry_run
   统一透传优化等级:  追加 --opt-level Os --ir-opt-level Oz (追加到每条 ruyituner
                      命令末尾; md 命令中已带同名参数时不重复追加)
+  优化工具链与基线分开: 追加 --opt_x86_path/--opt_riscv_path/--opt_aarch64_path
+                     (对应架构命令追加 --opt_tools_path, 缺省不追加, 由 ruyituner
+                     用基线工具链)
 
 注意: 需在项目根目录 (ruyi-tuner 主目录) 下运行; RunCSiBE.md 中的命令按项目根
 目录组织相对路径 (datasets/、--c_flags 的 -Ixxx 等), 从其它目录运行会解析错误.
@@ -91,13 +94,15 @@ def _has_flag(argv, name):
     return any(a == name or a.startswith(name + '=') for a in argv)
 
 
-def build_command(task, paths, dataset_dir=None, extra_args=None):
+def build_command(task, paths, dataset_dir=None, extra_args=None, opt_paths=None):
     """把 md 中的命令替换为实际路径 (md 命令均已自带 --search_scope project).
 
     dataset_dir: 指定时把命令中的 datasets/c_files/CSiBE-v2.1.1 数据集路径
     替换为该目录, 缺省保持原路径.
     extra_args: [(开关名, 值), ...], 如 [('--opt-level', 'Os')]; 统一追加到
     命令末尾透传给 ruyituner, md 命令中已带同名开关 (含 = 写法) 时不重复追加.
+    opt_paths: {架构: 优化工具链路径}; 指定架构时在命令末尾追加
+    --opt_tools_path (基线工具链与优化工具链分开), 未提供或值为 None 时不追加.
     未提供路径的架构跳过占位符替换 (只跑一个架构时其余路径为 None)."""
     line = task.cmd_line
     for placeholder, key in ((AARCH64_PLACEHOLDER, 'aarch64'),
@@ -117,6 +122,9 @@ def build_command(task, paths, dataset_dir=None, extra_args=None):
         for flag, value in extra_args:
             if not _has_flag(argv, flag):
                 argv += [flag, value]
+    if opt_paths and opt_paths.get(task.arch):
+        if not _has_flag(argv, '--opt_tools_path'):
+            argv += ['--opt_tools_path', opt_paths[task.arch]]
     return argv
 
 
@@ -296,11 +304,20 @@ def main():
         description='批量运行 RunCSiBE.md 中各 CSiBE 项目并汇总阶段 3/3 输出',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--x86_path', type=str, default=None,
-                        help='x86 工具链目录 (替换 md 中的 build-x86 路径)')
+                        help='x86 基线工具链目录 (替换 md 中的 build-x86 路径)')
     parser.add_argument('--riscv_path', type=str, default=None,
-                        help='RISC-V 工具链目录 (替换 md 中的 build-riscv 路径)')
+                        help='RISC-V 基线工具链目录 (替换 md 中的 build-riscv 路径)')
     parser.add_argument('--aarch64_path', type=str, default=None,
-                        help='AArch64 工具链目录 (替换 md 中的 build-aarch64 路径)')
+                        help='AArch64 基线工具链目录 (替换 md 中的 build-aarch64 路径)')
+    parser.add_argument('--opt_x86_path', type=str, default=None,
+                        help='x86 优化工具链目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
+    parser.add_argument('--opt_riscv_path', type=str, default=None,
+                        help='RISC-V 优化工具链目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
+    parser.add_argument('--opt_aarch64_path', type=str, default=None,
+                        help='AArch64 优化工具链目录 (对应命令追加 --opt_tools_path, '
+                             '缺省不追加, 由 ruyituner 用基线工具链)')
     parser.add_argument('--md_file', type=str, default=DEFAULT_MD,
                         help=f'RunCSiBE.md 路径 (默认: {DEFAULT_MD})')
     parser.add_argument('--output', type=str, default=DEFAULT_OUTPUT,
@@ -327,11 +344,15 @@ def main():
     archs = [args.only_arch] if args.only_arch else ['x86', 'riscv', 'aarch64']
     paths = {'x86': args.x86_path, 'riscv': args.riscv_path,
              'aarch64': args.aarch64_path}
+    opt_paths = {'x86': args.opt_x86_path, 'riscv': args.opt_riscv_path,
+                 'aarch64': args.opt_aarch64_path}
     for arch in archs:
         if not paths[arch]:
             parser.error(f'缺少 {arch} 工具链路径 (--{arch}_path)')
         if not os.path.isdir(paths[arch]):
             print(f'[run_csibe] 警告: {arch} 工具链目录不存在: {paths[arch]}')
+        if opt_paths[arch] and not os.path.isdir(opt_paths[arch]):
+            print(f'[run_csibe] 警告: {arch} 优化工具链目录不存在: {opt_paths[arch]}')
 
     tasks = parse_md(args.md_file)
     if not tasks:
@@ -363,7 +384,8 @@ def main():
     if args.dry_run:
         for t in tasks:
             print(f'  {t.project} ({t.arch}):',
-                  ' '.join(shlex.quote(a) for a in build_command(t, paths, args.dataset_dir, extra_args)))
+                  ' '.join(shlex.quote(a) for a in build_command(
+                      t, paths, args.dataset_dir, extra_args, opt_paths)))
         print(f'[run_csibe] 汇总将写入: {args.output}')
         print(f'[run_csibe] 数据表格将写入: {args.data_output}')
         sys.exit(0)
@@ -374,12 +396,16 @@ def main():
     with open(args.output, 'w', encoding='utf-8') as out_fh:
         out_fh.write('# CSiBE 各项目 ruyituner 输出 阶段 3/3 (实际编译对比) 汇总\n')
         out_fh.write(f'# 生成时间: {time.strftime("%Y-%m-%d %H:%M:%S")}\n')
-        out_fh.write(f'# x86 工具链: {args.x86_path}\n')
-        out_fh.write(f'# riscv 工具链: {args.riscv_path}\n')
-        out_fh.write(f'# aarch64 工具链: {args.aarch64_path}\n\n')
+        out_fh.write(f'# x86 工具链: {args.x86_path} (优化: '
+                     f'{args.opt_x86_path or "同基线"})\n')
+        out_fh.write(f'# riscv 工具链: {args.riscv_path} (优化: '
+                     f'{args.opt_riscv_path or "同基线"})\n')
+        out_fh.write(f'# aarch64 工具链: {args.aarch64_path} (优化: '
+                     f'{args.opt_aarch64_path or "同基线"})\n\n')
         out_fh.flush()
         for t in tasks:
-            run_task(t, build_command(t, paths, args.dataset_dir, extra_args), out_fh)
+            run_task(t, build_command(t, paths, args.dataset_dir, extra_args,
+                                      opt_paths), out_fh)
     print(f'[run_csibe] 全部完成, 汇总已写入: {args.output}')
 
     # 从汇总文件中抽取数据生成表格 (原 scripts/extract_tuner_data.py 的功能)

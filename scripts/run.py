@@ -20,7 +20,9 @@ from utils.common import get_inst_count_method, check_dataset_arch_matches_opt
 
 parser = ap.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True, help="the directory containing .ll files or specific .ll files to be tuned")
-parser.add_argument("--llvm_tools_path", type=str, required=True, help="Path to a specific version LLVM binary files")
+parser.add_argument("--baseline_tools_path", type=str, default=None, help="baseline toolchain path (LLVM binary files): used for baseline compilation/measurement; also the default optimization toolchain")
+parser.add_argument("--llvm_tools_path", type=str, default=None, help=ap.SUPPRESS)  # 旧名, 兼容保留
+parser.add_argument("--opt_tools_path", type=str, default=None, help="optimization toolchain path for the clang/opt/llc pipeline (pass scoring); default: same as --baseline_tools_path")
 parser.add_argument("--paircsv", type=str, required=True, help="the synergistic pair list to be used for training")
 parser.add_argument("--opt-level", type=str, default="Oz", choices=["O0", "O1", "O2", "O3", "Os", "Oz"], help="optimization level for the GA baseline scoring (default: Oz)")
 parser.add_argument("--count_mode", type=str, default="auto", choices=["auto", "opt-stats", "text", "obj-size"], help="instruction counting mode for scoring (default: auto)")
@@ -32,7 +34,16 @@ parser.add_argument("--output_dir", type=str, default=None, help="directory for 
 
 args = parser.parse_args()
 
-print("计数方式:", get_inst_count_method(args.llvm_tools_path, count_mode=args.count_mode))
+# --llvm_tools_path 为旧名, 兼容保留
+if args.baseline_tools_path is None:
+    if args.llvm_tools_path is None:
+        parser.error("缺少 --baseline_tools_path (旧名 --llvm_tools_path 已更名)")
+    args.baseline_tools_path = args.llvm_tools_path
+
+# 优化工具链缺省与基线工具链相同 (ruyituner.py 会把两个路径都显式传入)
+opt_tools_path = args.opt_tools_path or args.baseline_tools_path
+
+print("计数方式:", get_inst_count_method(opt_tools_path, count_mode=args.count_mode))
 
 # C 输入基线清单: 由 ruyituner.py 在 C→IR 编译时生成, 映射 .ll 相对路径 ->
 # 原始 .c/.i 源文件; obj-size 计数方式下基线直接用 clang -O<level> -c 编译
@@ -106,8 +117,9 @@ elif os.path.isfile(args.dataset) and args.dataset.endswith(".ll"):
 else:
     raise ValueError("The dataset argument must be a directory containing .ll files or a specific .ll file.")
 
-# 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件
-check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(args.llvm_tools_path, 'opt'))
+# 校验数据集架构与 opt 默认目标一致, 避免用 x86 的 opt 处理 riscv 的 .ll 文件;
+# 序列评分用优化工具链的 opt, 架构一致性校验以其为准
+check_dataset_arch_matches_opt([str(f) for f in filenames], os.path.join(opt_tools_path, 'opt'))
 
 if args.search_scope == 'project':
     # 项目模式: 为全部输入文件寻找一条公共的最优 pass 序列 (聚合适应度 GA)
@@ -116,10 +128,11 @@ if args.search_scope == 'project':
         with open(filename, 'r') as ll_file:
             file_codes.append((str(filename), ll_file.read()))
     path, score, total_baseline, total_after = LeverageSyner_GA_codesize_project(
-        pairlist, file_codes, llvm_tools_path=args.llvm_tools_path,
+        pairlist, file_codes, llvm_tools_path=opt_tools_path,
         opt_level=args.opt_level, count_mode=args.count_mode,
         max_path_length=args.max_path_length,
-        baseline_srcs=[_baseline_src_of(f) for f in filenames])
+        baseline_srcs=[_baseline_src_of(f) for f in filenames],
+        baseline_tools_path=args.baseline_tools_path)
     final_path = path if score != 0 else []
     out_dir_run = args.output_dir or os.path.join(project_root, 'output')
     project_name = args.project_name or _default_project_name()
@@ -157,7 +170,7 @@ for i, filename in enumerate(filenames, start=1):
     with open(filename, 'r') as ll_file:
         ll_code = ll_file.read()
     print(f"Current File [{i}/{len(filenames)}]:", filename)  
-    path, score, baseline_count, after_count = LeverageSyner_GA_codesize_file(pairlist, ll_code, llvm_tools_path=args.llvm_tools_path, opt_level=args.opt_level, count_mode=args.count_mode, max_path_length=args.max_path_length, baseline_src=_baseline_src_of(filename))
+    path, score, baseline_count, after_count = LeverageSyner_GA_codesize_file(pairlist, ll_code, llvm_tools_path=opt_tools_path, opt_level=args.opt_level, count_mode=args.count_mode, max_path_length=args.max_path_length, baseline_src=_baseline_src_of(filename), baseline_tools_path=args.baseline_tools_path)
     # 0分文件也按统一格式输出, 0分时Path输出为空; 但0分文件同样计入整体平均缩减率的分母
     total_baseline += int(baseline_count)
     total_after += int(after_count)

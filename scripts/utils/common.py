@@ -75,7 +75,7 @@ def _parse_obj_text_size(obj_path, llvm_size_path):
     return int(m.group(1)) if m else None
 
 
-def get_object_size(ir_code, llvm_tools_path=None):
+def get_object_size(ir_code, tools_path=None):
     '''用 llc 将 LLVM IR 编译为 .o 目标文件, 并返回 .o 中 .text 段的大小(字节).
 
     目标架构由 IR 内嵌的 target triple 决定 (与 get_instrcount 一致); .text
@@ -88,7 +88,7 @@ def get_object_size(ir_code, llvm_tools_path=None):
     '''
     if not isinstance(ir_code, str):
         raise RuntimeError('输入不是字符串, 无法编译为 .o')
-    bin_dir = llvm_tools_path or ''
+    bin_dir = tools_path or ''
     llc_path = os.path.join(bin_dir, 'llc') if bin_dir else 'llc'
     llvm_size_path = os.path.join(bin_dir, 'llvm-size') if bin_dir else 'llvm-size'
     tmpdir = tempfile.mkdtemp(prefix='ruyituner_')
@@ -107,16 +107,16 @@ def get_object_size(ir_code, llvm_tools_path=None):
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def get_c_object_size(src_path, llvm_tools_path=None, opt_level='Oz',
+def get_c_object_size(src_path, tools_path=None, opt_level='Oz',
                       c_std=None, c_flags=None, cwd=None):
     '''直接用 clang 以指定优化等级把 C 源码(.c/.i)编译为 .o, 返回 .text 段大小(字节).
 
     --input_type c 时的基线口径: 与真实编译一致, clang -O<level> -c 一步生成
     .o, 跳过 "C→IR(前端) → opt → llc" 的中间过程, 更贴近实际情况; clang 优先
-    取 llvm_tools_path 下的, 否则回退系统 PATH; 编译失败或工具缺失返回 None,
+    取 tools_path 下的, 否则回退系统 PATH; 编译失败或工具缺失返回 None,
     由调用方回退 IR 口径的基线.
     '''
-    bin_dir = llvm_tools_path or ''
+    bin_dir = tools_path or ''
     clang_path = os.path.join(bin_dir, 'clang') if bin_dir else None
     if clang_path is None or not os.path.isfile(clang_path):
         clang_path = shutil.which('clang')
@@ -143,11 +143,11 @@ def get_c_object_size(src_path, llvm_tools_path=None, opt_level='Oz',
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def get_object_file_text_size(obj_path, llvm_tools_path=None):
+def get_object_file_text_size(obj_path, tools_path=None):
     '''用 llvm-size 解析已有 .o 文件的 .text 段大小(字节); 失败返回 None.
 
     供 ruyituner.py 的实际编译对比阶段复用 obj-size 口径的 .text 解析逻辑.'''
-    bin_dir = llvm_tools_path or ''
+    bin_dir = tools_path or ''
     llvm_size_path = os.path.join(bin_dir, 'llvm-size') if bin_dir else 'llvm-size'
     try:
         return _parse_obj_text_size(obj_path, llvm_size_path)
@@ -159,7 +159,7 @@ def get_object_file_text_size(obj_path, llvm_tools_path=None):
 _COUNT_MODES = ('auto', 'opt-stats', 'text', 'obj-size')
 
 
-def get_inst_count(ir_code, llvm_tools_path=None, count_mode='auto'):
+def get_inst_count(ir_code, tools_path=None, count_mode='auto'):
     '''统计 LLVM IR 的总指令数, 等价于 LLVM InstCount/instcount pass 的 TotalInsts.
 
     count_mode 参数开关控制使用哪种统计方式:
@@ -177,7 +177,7 @@ def get_inst_count(ir_code, llvm_tools_path=None, count_mode='auto'):
         raise RuntimeError(f'未知的计数方式 {count_mode!r}, 可选值: {_COUNT_MODES}')
 
     if count_mode == 'obj-size':
-        size = get_object_size(ir_code, llvm_tools_path)
+        size = get_object_size(ir_code, tools_path)
         if size is None:
             raise RuntimeError('obj-size 计数方式不可用: llc/llvm-size 不存在或编译/解析失败')
         return size
@@ -185,10 +185,10 @@ def get_inst_count(ir_code, llvm_tools_path=None, count_mode='auto'):
     if count_mode == 'text':
         return _count_text(ir_code)
 
-    # 'auto' 与 'opt-stats' 都优先尝试 opt 统计 (需要显式指定 llvm_tools_path)
+    # 'auto' 与 'opt-stats' 都优先尝试 opt 统计 (需要显式指定 tools_path)
     opt_path = None
-    if llvm_tools_path:
-        opt_path = os.path.join(llvm_tools_path, 'opt')
+    if tools_path:
+        opt_path = os.path.join(tools_path, 'opt')
         if not os.path.isfile(opt_path):
             opt_path = None
     if opt_path and _opt_supports_stats(opt_path):
@@ -200,15 +200,15 @@ def get_inst_count(ir_code, llvm_tools_path=None, count_mode='auto'):
     return _count_text(ir_code)
 
 
-def get_inst_count_method(llvm_tools_path=None, count_mode='auto'):
+def get_inst_count_method(tools_path=None, count_mode='auto'):
     '''返回当前会使用的指令计数方式: 'opt-stats'、'text' 或 'obj-size'.
 
     与 get_inst_count 的决策逻辑一致, 供脚本在输出信息中展示计数方式.'''
     if count_mode in ('opt-stats', 'text', 'obj-size'):
         return count_mode
     # 'auto': 与 get_inst_count 相同的可用性判断
-    if llvm_tools_path:
-        opt_path = os.path.join(llvm_tools_path, 'opt')
+    if tools_path:
+        opt_path = os.path.join(tools_path, 'opt')
         if os.path.isfile(opt_path) and _opt_supports_stats(opt_path):
             return 'opt-stats'
     return 'text'
@@ -246,12 +246,12 @@ def check_dataset_arch_matches_opt(ll_files, opt_path):
         if ir_arch.lower() != opt_arch.lower():
             raise SystemExit(
                 f'{path}: IR 目标架构 {ir_arch} 与 opt 默认目标 {opt_arch} 不一致, '
-                f'请使用与数据集架构匹配的工具链 opt (--llvm_tools_path).')
+                f'请使用与数据集架构匹配的工具链 opt (--opt_tools_path).')
 
-def find_clang(llvm_tools_path):
-    '''查找 clang: 优先使用 llvm_tools_path 下的 clang, 否则回退到系统 PATH.'''
-    if llvm_tools_path:
-        cand = os.path.join(llvm_tools_path, 'clang')
+def find_clang(tools_path):
+    '''查找 clang: 优先使用 tools_path 下的 clang, 否则回退到系统 PATH.'''
+    if tools_path:
+        cand = os.path.join(tools_path, 'clang')
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     return shutil.which('clang')
@@ -386,24 +386,24 @@ _OPT_LEVEL_FLAGS = ('-O0', '-O1', '-O2', '-O3', '-Os', '-Oz',
                     'default<O3>', 'default<Os>', 'default<Oz>')
 
 
-def _count_after_opt(after_ll_code, original_ir_code, llvm_tools_path, count_mode):
+def _count_after_opt(after_ll_code, original_ir_code, tools_path, count_mode):
     '''统计优化后 IR 的代码大小; 统计失败时回退统计原始 IR.
 
     与 opt 崩溃时的处理一致: 特定序列的计数不可得(如 obj-size 口径下 llc 无法
     汇编该 IR)时视为无收益, 返回原始 IR 的计数; 若原始 IR 本身也无法统计(如
     工具链缺失), 异常继续向上抛出, 保证配置错误仍快速失败.'''
     try:
-        return get_inst_count(after_ll_code, llvm_tools_path, count_mode=count_mode)
+        return get_inst_count(after_ll_code, tools_path, count_mode=count_mode)
     except RuntimeError:
-        return get_inst_count(original_ir_code, llvm_tools_path, count_mode=count_mode)
+        return get_inst_count(original_ir_code, tools_path, count_mode=count_mode)
 
 
-def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
+def get_instrcount(ir_code, opt_flags, tools_path, count_mode='auto'):
     #统计IR指令数，这里是做了统计指令数的集中情况的预处理，真正最终统计指令数是在get_inst_count里最终落地
     #count_mode 计数方式开关 (见 get_inst_count): 'auto' | 'opt-stats' | 'text' | 'obj-size'
 
     pipeline = ",".join(opt_flags)
-    opt_path = os.path.join(llvm_tools_path, "opt") if llvm_tools_path else "opt"
+    opt_path = os.path.join(tools_path, "opt") if tools_path else "opt"
 
     # 使用 subprocess 运行 opt 命令
     input_code_io = io.StringIO()
@@ -418,13 +418,13 @@ def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
             cmd_opt = [opt_path] + [flag] + ["-S"]
             result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return _count_after_opt(after_ll_code, ir_code, llvm_tools_path, count_mode)
+            return _count_after_opt(after_ll_code, ir_code, tools_path, count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
-            return get_inst_count(ir_code, llvm_tools_path, count_mode=count_mode)
+            return get_inst_count(ir_code, tools_path, count_mode=count_mode)
     elif opt_flags == []:
         # 直接统计ll文件的IR指令数
-        return get_inst_count(ir_code, llvm_tools_path, count_mode=count_mode)
+        return get_inst_count(ir_code, tools_path, count_mode=count_mode)
     else:
         # 统计自定义pass序列（pipeline）优化后的指令数
         pipeline = fix_loop_nesting(pipeline)
@@ -432,7 +432,7 @@ def get_instrcount(ir_code, opt_flags, llvm_tools_path, count_mode='auto'):
         try:
             result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             after_ll_code = result.stdout
-            return _count_after_opt(after_ll_code, ir_code, llvm_tools_path, count_mode)
+            return _count_after_opt(after_ll_code, ir_code, tools_path, count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
-            return get_inst_count(ir_code, llvm_tools_path, count_mode=count_mode)
+            return get_inst_count(ir_code, tools_path, count_mode=count_mode)

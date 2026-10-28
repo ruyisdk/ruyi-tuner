@@ -24,7 +24,8 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 - LLVM 工具链
   - RuyiTuner 对 LLVM 版本没有硬性要求，较新版本的 LLVM 工具链均可使用，只需搭配与该版本匹配的 pass 列表（可手动构建，或由 train.py 自动生成，详见使用方法）。
   - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
-  - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：仅需 opt，无需其他工具；输入文件为 C 源码（`--input_type c`，支持 .c 与预处理后的 .i）：还需同一工具链中的 clang（`ninja clang`），用于先将源文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：还需同一工具链中的 llc 与 llvm-size（`ninja llc llvm-size`）。
+  - RuyiTuner 支持基线/优化两条独立工具链：`--baseline_tools_path` 为基线工具链（用于基线的直接编译/统计），`--opt_tools_path` 为优化工具链（用于 clang/opt/llc 三段过程），缺省与基线工具链相同；原参数名 `--llvm_tools_path` 已更名为 `--baseline_tools_path`（旧名兼容保留）。
+  - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：优化工具链仅需 opt；输入文件为 C 源码（`--input_type c`，支持 .c 与预处理后的 .i）：优化工具链还需 clang（`ninja clang`），用于先将源文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：优化工具链还需 llc 与 llvm-size（`ninja llc llvm-size`），基线工具链需 clang（直接编译源码成 .o 统计基线）。
 - 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
 
 ## 项目结构
@@ -80,20 +81,20 @@ ruyituner.py 是对 train.py 和 run.py 的封装，一次调用即可依次完�
 python3 ruyituner.py \
     --dataset ./datasets/ll_files/x86 \
     --input_type ll \
-    --llvm_tools_path /llvm_dir/build/bin
+    --baseline_tools_path /llvm_dir/build/bin
 
 # 仅训练，不优化
 python3 ruyituner.py \
     --dataset ./datasets/ll_files/x86 \
     --input_type ll \
-    --llvm_tools_path /llvm_dir/build/bin \
+    --baseline_tools_path /llvm_dir/build/bin \
     --only_train
 
 # 仅优化（复用已有的Step1_x86_EnumeratedPairs.csv）
 python3 ruyituner.py \
     --dataset ./datasets/ll_files/x86 \
     --input_type ll \
-    --llvm_tools_path /llvm_dir/build/bin \
+    --baseline_tools_path /llvm_dir/build/bin \
     --only_run \
     --paircsv ./output/Step1_x86_EnumeratedPairs.csv
 
@@ -101,7 +102,7 @@ python3 ruyituner.py \
 python3 ruyituner.py \
     --dataset ./datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 \
     --input_type c \
-    --llvm_tools_path /llvm_dir/build/bin \
+    --baseline_tools_path /llvm_dir/build/bin \
     --count_mode obj-size \
     --c_std gnu89 \
     --c_flags '-DHAVE_CONFIG_H'
@@ -110,17 +111,18 @@ python3 ruyituner.py \
 python3 ruyituner.py \
     --dataset ./datasets/c_files/CSiBE-v2.1.1/lwip-0.5.3.preproc \
     --input_type c \
-    --llvm_tools_path /llvm_dir/build/bin \
+    --baseline_tools_path /llvm_dir/build/bin \
     --count_mode obj-size \
     --c_std gnu89
 ```
 
 **参数说明：**
 - `--dataset`: 数据集目录或单个 .c/.i 源文件（必选，训练与优化共用）
-- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先`--llvm_tools_path`下的clang，回退系统PATH）以`--ir-opt-level`指定的优化等级（缺省与`--opt-level`一致，默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--ir-opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
+- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先优化工具链`--opt_tools_path`下的clang，回退系统PATH）以`--ir-opt-level`指定的优化等级（缺省与`--opt-level`一致，默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--ir-opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
 - `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
 - `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时不传；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
-- `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
+- `--baseline_tools_path`: 基线工具链路径（必选）；用于基线的直接编译/统计（obj-size 口径下 clang -O<level> -c 编译源码成 .o，其余口径用其 opt 计算基线）；缺省同时作为优化工具链；原参数名 `--llvm_tools_path` 已更名（旧名兼容保留）
+- `--opt_tools_path`: (可选) 优化工具链路径；用于 clang/opt/llc 三段过程（C→IR 转换、训练、GA 评分与实际编译对比）；缺省与 `--baseline_tools_path` 相同
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv`
@@ -153,26 +155,26 @@ cd scripts
 # 手动指定pass列表进行训练（--output_dir也可省略，默认使用项目根目录下的output/）
 python3 train.py \
     --dataset ../datasets/ll_files/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --opt_tools_path ../llvm_dir/build/bin \
     --output_dir ../output \
     --passfile ../passes_examples/passes_2210-gen.txt
 
 # 不提供--passfile，自动生成与LLVM版本匹配的pass列表后进行训练（--output_dir也可省略,默认使用项目根目录下的output/；pass列表默认不写文件，除非指定--passlist_output）
 python3 train.py \
     --dataset ../datasets/ll_files/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --opt_tools_path ../llvm_dir/build/bin \
     --output_dir ../output
 
 # 仅生成pass列表，不训练
 python3 train.py \
     --gen_passlist_only \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --opt_tools_path ../llvm_dir/build/bin \
     --passlist_output ../passes_XXXX.txt
 ```
 
 **参数说明：**
 - `--dataset`: 包含 .ll 文件的数据集目录（必选）
-- `--llvm_tools_path`: LLVM工具链路径，包含opt（必选）
+- `--opt_tools_path`: 优化工具链路径，包含opt（必选，由 ruyituner.py 传入；pass 枚举与协同对发现均属优化过程）
 - `--output_dir`: (可选) 输出结果保存目录；未指定时自动创建并使用项目根目录下的output目录
 - `--passfile`: (可选) LLVM Pass列表文件；不提供时自动生成与LLVM版本匹配的pass列表（默认不写文件）
 - `--gen_passlist_only`: (可选) 仅生成pass列表并退出，不训练；该模式下--dataset/--output_dir可不提供
@@ -208,13 +210,14 @@ Code Size Reduction Rate 为 0 的文件同样计入分母、分子贡献为 0�
 cd scripts
 python3 run.py \
     --dataset ../datasets/ll_files/x86 \
-    --llvm_tools_path ../llvm_dir/build/bin \
+    --baseline_tools_path ../llvm_dir/build/bin \
     --paircsv ../output/Step1_x86_EnumeratedPairs.csv
 ```
 
 **参数说明：**
 - `--dataset`: 待优化的 .ll 文件或包含 .ll 文件的目录
-- `--llvm_tools_path`: LLVM工具链路径
+- `--baseline_tools_path`: 基线工具链路径（必选）
+- `--opt_tools_path`: (可选) 优化工具链路径，候选序列的 opt/llc 评分使用，缺省与 `--baseline_tools_path` 相同
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
 - `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
@@ -281,7 +284,7 @@ python3 ruyituner.py \
     --input_type c \
     --search_scope project \
     --count_mode obj-size \
-    --llvm_tools_path /llvm_dir/build/bin
+    --baseline_tools_path /llvm_dir/build/bin
 ```
 
 **输出示例**（截取自 bzip2-1.0.2 的真实运行）：
@@ -302,16 +305,16 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 - `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
 - `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
 - `text`：强制按 IR 文本缩进规律统计指令行数；
-- `obj-size`：用工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积；llc 默认使用 pic 重定位模型，与 clang 在 x86_64/riscv64 Linux 上的默认代码生成及 C 输入基线一致，避免 static 口径少算 PLT/GOT 间接寻址开销）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
+- `obj-size`：用优化工具链中的 llc 把 IR 编译为 .o 目标文件，再用 llvm-size 解析并返回其中 .text 段的字节大小作为代码大小指标（不含符号表/重定位等 ELF 结构开销，更贴近实际代码体积；llc 默认使用 pic 重定位模型，与 clang 在 x86_64/riscv64 Linux 上的默认代码生成及 C 输入基线一致，避免 static 口径少算 PLT/GOT 间接寻址开销）；C 输入（`--input_type c`）时基线进一步贴近真实编译：直接用基线工具链的 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计 .text 大小（`clang -O<level> -c`），不再经过 C→IR→opt 中间过程，其余输入/计数组合的基线口径不变。
 
-四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求 `--llvm_tools_path` 下同时存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
+四种口径下训练与评分逻辑不变（协同对发现与 GA 评分公式相同），只是"指令数"的度量来源不同；`obj-size` 模式要求优化工具链（`--opt_tools_path`）下存在 opt、llc 与 llvm-size（构建时执行 `ninja llc llvm-size`），C 输入时基线工具链（`--baseline_tools_path`）下还需 clang（直接编译源码统计基线；两工具链缺省相同）。工具链缺失时直接报错；个别 IR 无法被 llc 汇编时（如 RISC-V 上的 pseudo-probe），按 opt 崩溃的同一策略回退统计原始 IR（该序列视为无收益）。
 
 ### 6. 输入支持：LLVM IR 与 C 源码
 
 RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
 
 - **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
-- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。工具链需包含 clang，先用 clang 以 `--ir-opt-level` 指定的优化等级（缺省与 `--opt-level` 一致，默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--ir-opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源采用 `--opt-level` 优化等级（C→IR 生成等级由 `--ir-opt-level` 控制，缺省与之相同）。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
+- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。优化工具链需包含 clang，先用 clang 以 `--ir-opt-level` 指定的优化等级（缺省与 `--opt-level` 一致，默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--ir-opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用基线工具链的 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源采用 `--opt-level` 优化等级（C→IR 生成等级由 `--ir-opt-level` 控制，缺省与之相同）。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
@@ -319,11 +322,11 @@ CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.
 
 按 RunCSiBE.md 中列出的命令，用 x86 / RISC-V / AArch64 三套工具链批量运行 CSiBE 各 benchmark（project 模式），并生成两个输出文件：`output/CSiBE_Step3_summary.txt` 汇总每个项目的实际编译对比阶段（阶段 3/3）输出；全部项目跑完后自动从该汇总中抽取各架构的基线大小、实际编译后总大小与实际代码体积缩减率，生成制表符分隔的数据表格 `output/CSiBE_data_summary.tsv`（表格功能为原 scripts/extract_tuner_data.py 合并而来）。
 
-脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:`/`aarch64:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径替换为 `--x86_path`/`--riscv_path`/`--aarch64_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录（md 命令均已自带 `--search_scope project`）；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入汇总文件（某次运行未产生该阶段时记录退出码与输出末尾）。testdata 与 linux-2.4.23-pre3-testplatform 两个目录不参与运行（前者为测试数据，后者的 .c 文件几乎都不能被 clang 独立编译），解析后自动跳过，即使出现在 `--projects` 中也会忽略并提示。
+脚本自动解析 RunCSiBE.md：以 `## N.项目名` 标题确定项目名、`x86:`/`riscv:`/`aarch64:` 行确定架构、`python3 ruyituner.py` 开头的行作为命令，把其中的占位工具链路径（基线工具链）替换为 `--x86_path`/`--riscv_path`/`--aarch64_path` 指定的实际路径、`/home/XXX/ruyi-tuner` 替换为项目根目录（md 命令均已自带 `--search_scope project`，命令中写的是 `--baseline_tools_path`）；另支持 `--opt-level`/`--ir-opt-level` 把基线优化等级与 C→IR 转换优化等级统一透传到每条命令（md 命令中已带同名参数时不重复追加），`--opt_x86_path`/`--opt_riscv_path`/`--opt_aarch64_path` 指定各架构的优化工具链（对应架构命令末尾自动追加 `--opt_tools_path`，缺省不追加、由 ruyituner 用基线工具链）；每个项目跑完后，从输出中截取实际编译对比阶段的完整内容（基线大小、实际编译后总大小、实际代码体积缩减率等），按 `项目名：架构名：输出信息` 格式逐条追加写入汇总文件（某次运行未产生该阶段时记录退出码与输出末尾）。testdata 与 linux-2.4.23-pre3-testplatform 两个目录不参与运行（前者为测试数据，后者的 .c 文件几乎都不能被 clang 独立编译），解析后自动跳过，即使出现在 `--projects` 中也会忽略并提示。
 
 数据表格 `CSiBE_data_summary.tsv` 的列：项目名称 + x86/riscv/aarch64 各三列（基线大小、实际编译后总大小、实际代码体积缩减率，缩减率带 % 号）；末尾追加“合计”行，各架构分别求和，缩减率按 (1 − 实际编译后总大小合计 / 基线大小合计) 换算（保留两位小数，基线合计为 0 时留空）；汇总文件中只有项目名、没有编译结果的项目不写入。
 
-如需先自动准备数据集（下载官方源码包并解压），可改用 `scripts/run_csibe_auto.py`：先下载 `CSiBE-v2.1.1.tar.gz`（GitHub Release，缓存在 `output/csibe_cache/` 下，已存在时跳过下载直接重新解压覆盖，`--force` 强制重下，`--no_download` 跳过下载与解压），解压后的数据集放 `output/csibe_cache/CSiBE-v2.1.1/`（testdata 与 linux-2.4.23-pre3-testplatform 两个目录不解压），再以项目根目录为工作目录调用本脚本批量运行，并自动把命令中的数据集路径替换为缓存目录；仓库跟踪的 `datasets/c_files/CSiBE-v2.1.1` 不会被改动，其余命令行参数原样透传（`--x86_path`、`--only_arch`、`--dry_run` 等均可用）。
+如需先自动准备数据集（下载官方源码包并解压），可改用 `scripts/run_csibe_auto.py`：先下载 `CSiBE-v2.1.1.tar.gz`（GitHub Release，缓存在 `output/csibe_cache/` 下，已存在时跳过下载直接重新解压覆盖，`--force` 强制重下，`--no_download` 跳过下载与解压），解压后的数据集放 `output/csibe_cache/CSiBE-v2.1.1/`（testdata 与 linux-2.4.23-pre3-testplatform 两个目录不解压），再以项目根目录为工作目录调用本脚本批量运行，并自动把命令中的数据集路径替换为缓存目录；仓库跟踪的 `datasets/c_files/CSiBE-v2.1.1` 不会被改动，其余命令行参数原样透传（`--x86_path`、`--opt_x86_path`、`--only_arch`、`--dry_run` 等均可用）。
 
 **注意**：该脚本需在 ruyi-tuner 项目根目录（主目录）下运行；RunCSiBE.md 中的命令按项目根目录组织相对路径（`datasets/...`、`--c_flags` 的 `-Ixxx` 等），从其它目录运行会导致数据集路径等解析错误。
 
@@ -357,7 +360,8 @@ python3 scripts/run_csibe.py \
 ```
 
 **参数说明：**
-- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 工具链目录（含 opt/clang/llc 等，替换 RunCSiBE.md 中对应的占位路径）；只跑一个架构时未用到的路径可不提供
+- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 基线工具链目录（含 opt/clang/llc 等，替换 RunCSiBE.md 中对应的占位路径）；只跑一个架构时未用到的路径可不提供
+- `--opt_x86_path`/`--opt_riscv_path`/`--opt_aarch64_path`: (可选) 对应架构的优化工具链目录（对应架构命令末尾追加 `--opt_tools_path`；缺省不追加，由 ruyituner 用基线工具链）
 - `--md_file`: (可选) RunCSiBE.md 路径，默认项目根目录下的 RunCSiBE.md
 - `--output`: (可选) 汇总输出文件，默认 `output/CSiBE_Step3_summary.txt`，自动创建目录
 - `--data_output`: (可选) 数据表格输出文件（TSV），默认 `output/CSiBE_data_summary.tsv`
@@ -393,7 +397,8 @@ python3 scripts/run_csibe_build.py \
 ```
 
 **参数说明：**
-- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 工具链目录（含 opt/clang/llc 等）；只跑一个架构时未用到的路径可不提供
+- `--x86_path`/`--riscv_path`/`--aarch64_path`: x86/RISC-V/AArch64 基线工具链目录（含 opt/clang/llc 等）；只跑一个架构时未用到的路径可不提供
+- `--opt_x86_path`/`--opt_riscv_path`/`--opt_aarch64_path`: (可选) 对应架构的优化工具链目录（对应架构命令末尾追加 `--opt_tools_path`；缺省不追加，由 ruyituner 用基线工具链）
 - `--only_arch`: (可选) 只跑一个架构（x86/riscv/aarch64）
 - `--projects`: (可选) 只跑指定项目（逗号分隔项目名，共 17 个，见 RunCSiBE.md）
 - `--dataset_dir`: (可选) 数据集根目录（含各项目子目录，缺省 `output/csibe_cache/CSiBE-v2.1.1`）
