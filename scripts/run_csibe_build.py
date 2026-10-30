@@ -5,20 +5,12 @@
 (scripts/run_csibe_build.py).
 
 本脚本是运行 CSiBE v2.1.1 的一条新路径, 不再依赖 RunCSiBE.md 里写死的命令:
-直接解析每个项目源码目录下自带的 Makefile.in (CSiBE v2.1.1 官方构建系统的配置
-模板, 与源码一起发布), 展开其中的 $(VAR) 变量引用, 从 CFLAGS 中提取编译宏
-(-D/-U) 与头文件路径 (-I) 拼成 --c_flags, 再为 x86 / RISC-V / AArch64 三套
-工具链分别构造 ruyituner 命令 (均带 --search_scope project) 批量运行, 为每个
-项目找出最优 pass 序列, 汇总基线大小/实际编译后总大小/缩减率并生成 TSV 数据表.
-
-Makefile.in 解析规则:
-  - 收集项目目录树下所有 Makefile.in 的 CFLAGS (部分项目顶层 Makefile.in 只是
-    递归, 真正的 CFLAGS 在子目录的 Makefile.in 里);
-  - $(CCOPT) 展开为空 (优化等级由 ruyituner 的 --opt-level 决定);
-  - $(VPATH) 展开为该 Makefile.in 所在目录 (源码包中它是 @CSiBE-SRCDIR@ 占位符),
-    -I 相对路径按该目录解析为绝对路径, 不存在的头文件目录丢弃并提示;
-  - 只保留 -D/-U/-I 参数, -w/-ansi/-fno-builtin 等不传给 ruyituner
-    (-ansi 由统一的 --c_std gnu89 代替), 重复参数去重.
+各项目的编译参数 (-D/-U/-I 与 C 标准) 由 ruyituner.py 自动解析项目源码目录下
+自带的 Makefile.in 获得 (--input_type c 且数据集目录含 Makefile.in 时自动
+生效, 未显式提供 --c_std 时自动默认 gnu89), 本脚本不再自行抽取、也不再向命令
+中写入 --c_std gnu89; 只为 x86 / RISC-V / AArch64 三套工具链分别构造
+ruyituner 命令 (均带 --search_scope project) 批量运行, 为每个项目找出最优
+pass 序列, 汇总基线大小/实际编译后总大小/缩减率并生成 TSV 数据表.
 
 架构差异: aarch64 命令在 --c_flags 中追加 --target=aarch64-unknown-linux-gnu
 (交叉工具链的 clang 默认 triple 为 unknown, 必须显式指定); riscv 的 libmspack
@@ -183,98 +175,6 @@ def extract_dataset(tar_path, dataset_dir):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-# Makefile 变量定义与 $(VAR) 引用
-VAR_ASSIGN_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(:=|=)\s*(.*)$')
-VAR_REF_RE = re.compile(r'\$\(([A-Za-z_][A-Za-z0-9_]*)\)')
-
-
-def read_makefile_variables(mk_path, vpath_dir):
-    """读取一个 Makefile.in 的变量定义, 返回变量字典.
-
-    行尾 \\ 续行先合并成逻辑行, 规则行 (缩进开头) 与注释行跳过;
-    CCOPT 强制置空、VPATH 强制置为 vpath_dir (该 Makefile.in 所在目录),
-    不取文件里 @CSiBE-CCOPT@ / @CSiBE-SRCDIR@ 占位符的值."""
-    logical_lines = []
-    buf = None
-    with open(mk_path, encoding='utf-8', errors='ignore') as fh:
-        for raw in fh:
-            line = raw.rstrip('\n')
-            if buf is not None:
-                line = buf + line.lstrip()
-                buf = None
-            if line.rstrip().endswith('\\'):
-                buf = line.rstrip()[:-1] + ' '
-                continue
-            logical_lines.append(line)
-        if buf is not None:
-            logical_lines.append(buf)
-
-    variables = {}
-    for line in logical_lines:
-        if not line.strip() or line.strip().startswith('#'):
-            continue
-        m = VAR_ASSIGN_RE.match(line)
-        if not m:
-            continue
-        name, value = m.group(1), m.group(3).strip()
-        if name in ('CCOPT', 'VPATH'):
-            continue
-        variables[name] = value
-    variables['CCOPT'] = ''
-    variables['VPATH'] = vpath_dir
-    return variables
-
-
-def expand_make_variables(text, variables):
-    """递归展开 $(VAR) 引用, 未定义的变量展开为空, 最多迭代 16 次防循环."""
-    for _ in range(16):
-        expanded = VAR_REF_RE.sub(lambda m: variables.get(m.group(1), ''), text)
-        if expanded == text:
-            return expanded
-        text = expanded
-    return text
-
-
-def extract_project_flags(project_dir):
-    """解析 project_dir 目录树下所有 Makefile.in 的 CFLAGS, 提取 -D/-U/-I 参数.
-
-    -I 相对路径按该 Makefile.in 所在目录解析为绝对路径 (clang 在数据集根目录下
-    执行也成立); 不存在的头文件目录丢弃并提示; 返回保序去重的参数列表."""
-    flags = []
-    seen = set()
-    makefiles = []
-    for root, _dirs, files in os.walk(project_dir):
-        for name in files:
-            if name == 'Makefile.in':
-                makefiles.append(os.path.join(root, name))
-    for mk_path in sorted(makefiles):
-        mk_dir = os.path.dirname(mk_path)
-        variables = read_makefile_variables(mk_path, mk_dir)
-        cflags = expand_make_variables(variables.get('CFLAGS', ''), variables)
-        if not cflags.strip():
-            continue
-        for token in cflags.split():
-            if token.startswith('-I') and len(token) > 2:
-                path = token[2:]
-                if not os.path.isabs(path):
-                    path = os.path.join(mk_dir, path)
-                path = os.path.abspath(path)
-                if not os.path.isdir(path):
-                    print(f'[run_csibe_build] 丢弃不存在的头文件目录 {token} '
-                          f'(来自 {os.path.relpath(mk_path, project_dir)})')
-                    continue
-                item = '-I' + path
-            elif token.startswith(('-D', '-U')):
-                item = token
-            else:
-                # -w/-ansi/-fno-builtin 等不传给 ruyituner (-ansi 由 --c_std 代替)
-                continue
-            if item not in seen:
-                seen.add(item)
-                flags.append(item)
-    return flags
-
-
 Task = namedtuple('Task', ['project', 'arch', 'cmd_line'])
 
 
@@ -305,10 +205,13 @@ def extract_stage3(lines):
     return '\n'.join(lines[start:end]).rstrip()
 
 
-def build_command(project, arch, paths, dataset_root, flags,
+def build_command(project, arch, paths, dataset_root,
                   riscv_sysroot, sysroot_projects, extra_args, opt_paths=None):
     """为一个项目拼出一条 ruyituner 命令 (--search_scope project 模式).
 
+    各项目的编译参数 (-D/-U/-I 与 C 标准) 由 ruyituner.py 自动解析项目自带
+    Makefile.in 获得, 这里只追加架构差异参数 (aarch64 --target 与
+    riscv --sysroot);
     opt_paths: {架构: 优化工具链路径}; 指定架构时在命令末尾追加
     --opt_tools_path (基线工具链与优化工具链分开), 未提供时则不追加."""
     argv = [sys.executable, '-u', RUYITUNER_PY,
@@ -316,9 +219,8 @@ def build_command(project, arch, paths, dataset_root, flags,
             '--baseline_tools_path', paths[arch],
             '--count_mode', 'obj-size',
             '--input_type', 'c',
-            '--c_std', 'gnu89',
             '--search_scope', 'project']
-    c_flags = list(flags)
+    c_flags = []
     if arch == 'aarch64':
         # 交叉工具链 clang 默认 triple 为 unknown, 必须显式指定目标
         c_flags.append('--target=aarch64-unknown-linux-gnu')
@@ -490,8 +392,9 @@ def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
-        description='解析 CSiBE v2.1.1 各项目自带 Makefile.in 的编译配置, '
-                    '生成并批量运行 x86/RISC-V/AArch64 的 ruyituner 命令',
+        description='按 CSiBE v2.1.1 各项目自带 Makefile.in 的编译配置 '
+                    '(由 ruyituner 自动解析), 生成并批量运行 '
+                    'x86/RISC-V/AArch64 的 ruyituner 命令',
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--x86_path', type=str, default=None,
                         help='x86 基线工具链 bin 目录')
@@ -593,16 +496,13 @@ def main():
     sysroot_projects = {p.strip() for p in args.riscv_sysroot_projects.split(',')
                         if p.strip()}
 
-    # 每个项目解析一次 Makefile.in 编译配置, 三个架构复用
+    # 各项目编译参数由 ruyituner.py 自动解析项目自带 Makefile.in 获得
+    # (--input_type c 且数据集目录含 Makefile.in 时自动生效), 这里只按架构
+    # 追加差异参数, 三个架构共用同一组项目
     tasks = []
-    flag_map = {}
     for project in projects:
-        flags = extract_project_flags(os.path.join(dataset_root, project))
-        flag_map[project] = flags
-        print(f'[run_csibe_build] {project}: 来自 Makefile.in 的编译参数: '
-              f'{" ".join(flags) if flags else "(无 -D/-I 参数)"}')
         for arch in archs:
-            argv = build_command(project, arch, paths, dataset_root, flags,
+            argv = build_command(project, arch, paths, dataset_root,
                                  args.riscv_sysroot, sysroot_projects, extra_args,
                                  opt_paths)
             tasks.append(Task(project, arch, argv))
@@ -621,7 +521,7 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
     with open(args.output, 'w', encoding='utf-8') as out_fh:
         out_fh.write('# CSiBE v2.1.1 各项目 ruyituner 输出 实际编译对比阶段汇总 '
-                     '(编译参数取自各项目 Makefile.in)\n')
+                     '(各项目编译参数由 ruyituner 自动解析 Makefile.in)\n')
         out_fh.write(f'# 生成时间: {time.strftime("%Y-%m-%d %H:%M:%S")}\n')
         out_fh.write(f'# 数据集根目录: {dataset_root}\n')
         out_fh.write(f'# x86 工具链: {args.x86_path} (优化: '
@@ -632,9 +532,6 @@ def main():
                      f'{args.opt_aarch64_path or "同基线"})\n')
         out_fh.write(f'# riscv --sysroot: {args.riscv_sysroot or "(未使用)"} '
                      f'(项目: {", ".join(sorted(sysroot_projects)) or "无"})\n')
-        for project in projects:
-            flags = flag_map[project]
-            out_fh.write(f'# {project}: {" ".join(flags) if flags else "(无 -D/-I 参数)"}\n')
         out_fh.write('\n')
         out_fh.flush()
         for task in tasks:

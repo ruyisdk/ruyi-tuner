@@ -119,8 +119,8 @@ python3 ruyituner.py \
 **参数说明：**
 - `--dataset`: 数据集目录或单个 .c/.i 源文件（必选，训练与优化共用）
 - `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先优化工具链`--opt_tools_path`下的clang，回退系统PATH）以`--ir-opt-level`指定的优化等级（缺省与`--opt-level`一致，默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--ir-opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
-- `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
-- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时不传；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
+- `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时，若数据集为CSiBE等自带Makefile.in的项目则自动默认为gnu89（与CSiBE官方构建的-ansi口径一致），否则不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
+- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时，若数据集为CSiBE等自带Makefile.in的项目则自动解析其中CFLAGS的`-D`/`-U`/`-I`参数（`-I`相对路径按该Makefile.in所在目录解析为绝对路径，不存在的头文件目录丢弃并提示，`-w`/`-ansi`/`-fno-builtin`等不传），无需手工提供；显式提供时追加在自动解析参数之后，可覆盖同类自动参数；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
 - `--baseline_tools_path`: 基线工具链路径（必选）；用于基线的直接编译/统计（obj-size 口径下 clang -O<level> -c 编译源码成 .o，其余口径用其 opt 计算基线）；缺省同时作为优化工具链；原参数名 `--llvm_tools_path` 已更名（旧名兼容保留）
 - `--opt_tools_path`: (可选) 优化工具链路径；用于 clang/opt/llc 三段过程（C→IR 转换、训练、GA 评分与实际编译对比）；缺省与 `--baseline_tools_path` 相同
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
@@ -372,18 +372,38 @@ python3 scripts/run_csibe.py \
 
 ### 8. CSiBE 构建配置批量运行脚本（scripts/run_csibe_build.py）
 
-运行 CSiBE v2.1.1 的另一条路径：不依赖 RunCSiBE.md 里写死的命令，直接解析每个项目源码目录下自带的 Makefile.in（CSiBE v2.1.1 官方构建系统的配置模板，与源码一起发布），展开其中的 `$(VAR)` 变量引用，从 CFLAGS 中提取编译宏（`-D`/`-U`）与头文件路径（`-I`）拼成 `--c_flags`，再为 x86 / RISC-V / AArch64 三套工具链分别构造 ruyituner 命令（均带 `--search_scope project`）批量运行，为每个项目找出最优 pass 序列。本脚本自成一体，不 import scripts/run_csibe.py 与 scripts/run_csibe_auto.py，外部脚本只以子进程方式调用 ruyituner.py；汇总与 TSV 数据表格逻辑自行实现，格式与 run_csibe.py 相同，默认文件名分别为 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`（与 RunCSiBE.md 路径的输出互不覆盖）。
+运行 CSiBE v2.1.1 的另一条路径：不依赖 RunCSiBE.md 里写死的命令，各项目的编译参数（`-D`/`-U`/`-I` 与 C 标准）由 ruyituner.py 自动解析项目源码目录下自带的 Makefile.in 获得（`--input_type c` 且数据集目录含 Makefile.in 时自动生效，未显式提供 `--c_std` 时自动默认 gnu89，详见第 1 节 `--c_std`/`--c_flags` 参数说明），本脚本只为各架构命令追加架构差异参数，再为 x86 / RISC-V / AArch64 三套工具链分别构造 ruyituner 命令（均带 `--search_scope project`）批量运行，为每个项目找出最优 pass 序列。本脚本自成一体，不 import scripts/run_csibe.py 与 scripts/run_csibe_auto.py，外部脚本只以子进程方式调用 ruyituner.py；汇总与 TSV 数据表格逻辑自行实现，格式与 run_csibe.py 相同，默认文件名分别为 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`（与 RunCSiBE.md 路径的输出互不覆盖）。
 
-Makefile.in 解析规则：收集项目目录树下所有 Makefile.in 的 CFLAGS（部分项目顶层只是递归，真正的 CFLAGS 在子目录里）；`$(CCOPT)` 展开为空（优化等级由 `--opt-level` 决定）；`$(VPATH)` 展开为该 Makefile.in 所在目录，`-I` 相对路径按该目录解析为绝对路径（不存在的头文件目录丢弃并提示）；只保留 `-D`/`-U`/`-I` 参数（`-w`/`-ansi`/`-fno-builtin` 等不传给 ruyituner，`-ansi` 由统一的 `--c_std gnu89` 代替），重复参数去重。
+架构差异：aarch64 命令在 `--c_flags` 中追加 `--target=aarch64-unknown-linux-gnu`；riscv 的 libmspack 追加 `--sysroot`（默认 `/opt/riscv/sysroot`，可经 `--riscv_sysroot` 修改、置空关闭，`--riscv_sysroot_projects` 调整应用的项目列表），其余项目与 x86 相同。
 
-架构差异：aarch64 命令在 `--c_flags` 中追加 `--target=aarch64-unknown-linux-gnu`（交叉工具链的 clang 默认 triple 为 unknown，必须显式指定）；riscv 的 libmspack 追加 `--sysroot`（默认 `/opt/riscv/sysroot`，可经 `--riscv_sysroot` 修改、置空关闭，`--riscv_sysroot_projects` 调整应用的项目列表），其余项目与 x86 相同。
+这两个参数不是 CSiBE 项目自身的编译需求，而是本环境中两套交叉工具链的特殊性，因此不放进 ruyituner.py 的自动解析，而是由本批量脚本统一追加，保证 ruyituner.py 保持“架构无关”的通用性。手工单独运行 ruyituner.py 时遇到同类情况，自行在 `--c_flags` 中带上即可：
+
+```bash
+# aarch64 交叉工具链 (build-aarch64)：只注册 ARM 系后端，clang 默认 triple 为
+# unknown、opt/llc 默认目标为空，必须显式 --target 指定目标；不指定时 clang 无
+# sysroot 会静默回退宿主 /usr/include 编译
+python3 ruyituner.py \
+    --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2 \
+    --input_type c --search_scope project --count_mode obj-size \
+    --baseline_tools_path /llvm_dir/build-aarch64/bin \
+    --c_flags '--target=aarch64-unknown-linux-gnu'
+
+# riscv 交叉工具链 (build-riscv)：默认头文件是裸机 newlib
+# (/opt/riscv/riscv64-unknown-elf/include，缺 dirent/lstat/utime 等)，依赖 glibc
+# 头文件的项目（如 libmspack）需追加 --sysroot 指向 glibc 头文件目录
+python3 ruyituner.py \
+    --dataset datasets/c_files/CSiBE-v2.1.1/libmspack \
+    --input_type c --search_scope project --count_mode obj-size \
+    --baseline_tools_path /llvm_dir/build-riscv/bin \
+    --c_flags '--sysroot=/opt/riscv/sysroot'
+```
 
 数据集准备与 run_csibe_auto.py 相同：默认先下载官方源码包并解压到 `output/csibe_cache/CSiBE-v2.1.1/`（`--no_download` 跳过下载与解压，`--force` 强制重下，`--tar_path` 指定缓存路径）；也可用 `--dataset_dir` 指向其它副本（仓库跟踪的 `datasets/c_files/CSiBE-v2.1.1` 各项目目录同样自带 Makefile.in，可直接使用）。
 
 **使用演示：**
 
 ```bash
-# 下载源码包并解压后, 用三套工具链按 Makefile.in 编译配置批量运行全部项目
+# 下载源码包并解压后, 用三套工具链批量运行全部项目（编译参数由 ruyituner 自动解析 Makefile.in）
 python3 scripts/run_csibe_build.py \
     --x86_path /llvm_dir/build-x86/bin \
     --riscv_path /llvm_dir/build-riscv/bin \

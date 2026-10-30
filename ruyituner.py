@@ -20,6 +20,10 @@ ruyituner: 一键完成训练(train.py)与优化(run.py), 以及 C 输入项目�
 --opt_tools_path 为优化工具链, 用于 clang/opt/llc 三段过程 (C→IR 转换、训练、
 GA 评分与实际编译对比), 缺省与基线工具链相同.
 
+CSiBE 等自带 Makefile.in 的 C 项目无需手工维护编译参数: ruyituner 自动解析
+其中 CFLAGS 的 -D/-U/-I 并透传给 clang, 未显式提供 --c_std 时自动默认 gnu89;
+--c_std/--c_flags 仍可显式提供, 追加/覆盖于自动解析结果.
+
 用法示例:
   # 完整流程 (训练 + 优化)
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --baseline_tools_path ../llvm_dir/build/bin
@@ -75,6 +79,103 @@ DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
 # scripts/ 目录加入模块搜索路径, 复用公共函数 (dataset_output_name 等)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
 from utils.common import find_clang, dataset_output_name, dataset_arch_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
+
+
+# ---- CSiBE 等项目的编译参数自动解析 (Makefile.in) ----
+# 移植自 scripts/run_csibe_build.py: 解析项目自带的 Makefile.in 中的 CFLAGS,
+# 提取 -D/-U/-I 参数供 clang 使用, 免去 C 输入时手工维护 --c_std/--c_flags
+
+# Makefile 变量定义与 $(VAR) 引用
+VAR_ASSIGN_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(:=|=)\s*(.*)$')
+VAR_REF_RE = re.compile(r'\$\(([A-Za-z_][A-Za-z0-9_]*)\)')
+
+
+def read_makefile_variables(mk_path, vpath_dir):
+    """读取一个 Makefile.in 的变量定义, 返回变量字典.
+
+    行尾 \\ 续行先合并成逻辑行, 规则行 (缩进开头) 与注释行跳过;
+    CCOPT 强制置空、VPATH 强制置为 vpath_dir (该 Makefile.in 所在目录),
+    不取文件里 @CSiBE-CCOPT@ / @CSiBE-SRCDIR@ 占位符的值."""
+    logical_lines = []
+    buf = None
+    with open(mk_path, encoding='utf-8', errors='ignore') as fh:
+        for raw in fh:
+            line = raw.rstrip('\n')
+            if buf is not None:
+                line = buf + line.lstrip()
+                buf = None
+            if line.rstrip().endswith('\\'):
+                buf = line.rstrip()[:-1] + ' '
+                continue
+            logical_lines.append(line)
+        if buf is not None:
+            logical_lines.append(buf)
+
+    variables = {}
+    for line in logical_lines:
+        if not line.strip() or line.strip().startswith('#'):
+            continue
+        m = VAR_ASSIGN_RE.match(line)
+        if not m:
+            continue
+        name, value = m.group(1), m.group(3).strip()
+        if name in ('CCOPT', 'VPATH'):
+            continue
+        variables[name] = value
+    variables['CCOPT'] = ''
+    variables['VPATH'] = vpath_dir
+    return variables
+
+
+def expand_make_variables(text, variables):
+    """递归展开 $(VAR) 引用, 未定义的变量展开为空, 最多迭代 16 次防循环."""
+    for _ in range(16):
+        expanded = VAR_REF_RE.sub(lambda m: variables.get(m.group(1), ''), text)
+        if expanded == text:
+            return expanded
+        text = expanded
+    return text
+
+
+def extract_project_flags(project_dir):
+    """解析 project_dir 目录树下所有 Makefile.in 的 CFLAGS, 提取 -D/-U/-I 参数.
+
+    -I 相对路径按该 Makefile.in 所在目录解析为绝对路径 (clang 在数据集根目录下
+    执行也成立); 不存在的头文件目录丢弃并提示; 返回保序去重的参数列表;
+    目录下没有 Makefile.in 时返回空列表."""
+    flags = []
+    seen = set()
+    makefiles = []
+    for root, _dirs, files in os.walk(project_dir):
+        for name in files:
+            if name == 'Makefile.in':
+                makefiles.append(os.path.join(root, name))
+    for mk_path in sorted(makefiles):
+        mk_dir = os.path.dirname(mk_path)
+        variables = read_makefile_variables(mk_path, mk_dir)
+        cflags = expand_make_variables(variables.get('CFLAGS', ''), variables)
+        if not cflags.strip():
+            continue
+        for token in cflags.split():
+            if token.startswith('-I') and len(token) > 2:
+                path = token[2:]
+                if not os.path.isabs(path):
+                    path = os.path.join(mk_dir, path)
+                path = os.path.abspath(path)
+                if not os.path.isdir(path):
+                    print(f'[ruyituner] 丢弃不存在的头文件目录 {token} '
+                          f'(来自 {os.path.relpath(mk_path, project_dir)})')
+                    continue
+                item = '-I' + path
+            elif token.startswith(('-D', '-U')):
+                item = token
+            else:
+                # -w/-ansi/-fno-builtin 等不传给 clang (-ansi 由自动默认的 gnu89 代替)
+                continue
+            if item not in seen:
+                seen.add(item)
+                flags.append(item)
+    return flags
 
 
 def build_train_cmd(args, dataset, project_name):
@@ -282,6 +383,11 @@ def build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name)
 
 
 def main():
+    # print 接入管道时默认块缓冲, 会让自身横幅/阶段标题排在子脚本
+    # (train.py/run.py/real_compile.py) 输出之后, 重定向日志时顺序错乱;
+    # 改为行缓冲保证输出顺序一致
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
         description='ruyituner: 一键完成训练(train.py)与优化(run.py)',
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -291,9 +397,9 @@ def main():
                         choices=['ll', 'c'],
                         help='输入文件类型 (必选): ll=LLVM IR (原处理路径), c=C 源码 (.c 或预处理后的 .i, 先用clang以--ir-opt-level优化等级生成.ll再走原路径)')
     parser.add_argument('--c_std', type=str, default=None,
-                        help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时不传 -std)')
+                        help='传给 clang 的 C 语言标准, 如 gnu89 (可选, 仅 --input_type c 生效; 不提供时数据集含 Makefile.in 自动默认 gnu89, 否则不传 -std)')
     parser.add_argument('--c_flags', type=str, default=None,
-                        help='传给 clang 的额外编译参数, 如 -DHAVE_CONFIG_H (可选, 仅 --input_type c 生效; 支持空格分隔多个)')
+                        help='传给 clang 的额外编译参数, 如 -DHAVE_CONFIG_H (可选, 仅 --input_type c 生效; 支持空格分隔多个; 数据集含 Makefile.in 时自动解析其 -D/-U/-I, 显式提供时追加在自动参数之后可覆盖)')
     parser.add_argument('--baseline_tools_path', type=str, default=None,
                         help='基线工具链路径: 用于基线的直接编译/统计 (obj-size 口径下 clang -O<level> -c 编译源码成 .o, 其余口径用其 opt 计算基线); 缺省同时作为优化工具链')
     parser.add_argument('--llvm_tools_path', type=str, default=None,
@@ -381,6 +487,21 @@ def main():
         if clang is None:
             print('[ruyituner] 未找到 clang: 优化工具链 (--opt_tools_path) 与系统 PATH 中均无可用 clang, 终止.')
             sys.exit(1)
+        # CSiBE 等自带 Makefile.in 的数据集: 自动解析编译参数 (-D/-U/-I) 并
+        # 透传给 clang, 免去手工维护 --c_flags; 用户显式传 --c_flags 时追加在
+        # 自动参数之后 (可覆盖自动抽取的同类参数)
+        if os.path.isdir(args.dataset) and any(
+                name == 'Makefile.in'
+                for _root, _dirs, names in os.walk(args.dataset) for name in names):
+            auto_flags = extract_project_flags(args.dataset)
+            if auto_flags:
+                extra = ' '.join(auto_flags)
+                args.c_flags = f'{extra} {args.c_flags}' if args.c_flags else extra
+                print(f'[ruyituner] 从 Makefile.in 自动解析编译参数: {extra}')
+            if args.c_std is None:
+                # 老式 C 项目默认按 gnu89 编译 (与 CSiBE 官方构建的 -ansi 口径一致)
+                args.c_std = 'gnu89'
+                print('[ruyituner] 检测到 Makefile.in, C 标准自动默认为 gnu89 (可用 --c_std 覆盖)')
         # C→IR 转换的优化等级: --ir-opt-level 缺省时与基线优化等级 --opt-level 一致
         ir_opt_level = args.ir_opt_level or args.opt_level
         std_info = f', C 标准: {args.c_std}' if args.c_std else ''
