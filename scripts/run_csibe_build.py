@@ -35,8 +35,7 @@ pass 序列, 汇总基线大小/实际编译后总大小/缩减率并生成 TSV 
                      用基线工具链)
 
 本脚本自成一体: 源码包下载/解压、任务运行/汇总与 TSV 数据表格的逻辑都在本文件内
-实现, 不 import scripts/run_csibe.py 与 scripts/run_csibe_auto.py; 外部脚本只以
-子进程方式调用 ruyituner.py.
+实现, 只以子进程方式调用 ruyituner.py.
 """
 
 import argparse
@@ -336,19 +335,19 @@ def parse_summary(path):
     return [(name, data[name]) for name in order]
 
 
-def write_data_table(records, out_path):
+def write_data_table(records, out_path, archs):
     """把 parse_summary 的结果写成制表符分隔的数据表格 (含表头与合计行).
 
-    列为 项目名称 + x86/riscv/aarch64 各三列 (基线大小/实际编译后总大小/
-    实际代码体积缩减率); 缩减率带 % 号; 合计行各架构分别求和, 缩减率按
-    (1 − 实际编译后总大小合计/基线大小合计) 换算 (基线合计为 0 时留空)."""
-    header = [
-        '项目名称',
-        'x86基线大小', 'x86实际编译后总大小', 'x86实际代码体积缩减率(%)',
-        'riscv基线大小', 'riscv实际编译后总大小', 'riscv实际代码体积缩减率(%)',
-        'aarch64基线大小', 'aarch64实际编译后总大小', 'aarch64实际代码体积缩减率(%)',
-    ]
-    sums = {arch: {'baseline': 0, 'actual': 0} for arch in ('x86', 'riscv', 'aarch64')}
+    archs 为本次实际运行的架构列表 (如 --only_arch x86 时只有 x86), 表头、
+    数据行与合计行只列出这些架构; 列为 项目名称 + 每个架构三列 (基线大小/
+    实际编译后总大小/实际代码体积缩减率); 缩减率带 % 号; 合计行各架构分别
+    求和, 缩减率按 (1 − 实际编译后总大小合计/基线大小合计) 换算 (基线合计
+    为 0 时留空)."""
+    header = ['项目名称']
+    for arch in archs:
+        header += [f'{arch}基线大小', f'{arch}实际编译后总大小',
+                   f'{arch}实际代码体积缩减率(%)']
+    sums = {arch: {'baseline': 0, 'actual': 0} for arch in archs}
 
     def fmt_red(d):
         v = d.get('reduction', '')
@@ -366,24 +365,18 @@ def write_data_table(records, out_path):
         w = csv.writer(f, delimiter='\t')
         w.writerow(header)
         for name, data in records:
-            x86 = data.get('x86', {})
-            riscv = data.get('riscv', {})
-            aarch64 = data.get('aarch64', {})
-            for arch, d in (('x86', x86), ('riscv', riscv), ('aarch64', aarch64)):
+            row = [name]
+            for arch in archs:
+                d = data.get(arch, {})
                 sums[arch]['baseline'] += int(d.get('baseline') or 0)
                 sums[arch]['actual'] += int(d.get('actual') or 0)
-            w.writerow([
-                name,
-                x86.get('baseline', ''), x86.get('actual', ''), fmt_red(x86),
-                riscv.get('baseline', ''), riscv.get('actual', ''), fmt_red(riscv),
-                aarch64.get('baseline', ''), aarch64.get('actual', ''), fmt_red(aarch64),
-            ])
-        w.writerow([
-            '合计',
-            sums['x86']['baseline'], sums['x86']['actual'], total_red('x86'),
-            sums['riscv']['baseline'], sums['riscv']['actual'], total_red('riscv'),
-            sums['aarch64']['baseline'], sums['aarch64']['actual'], total_red('aarch64'),
-        ])
+                row += [d.get('baseline', ''), d.get('actual', ''), fmt_red(d)]
+            w.writerow(row)
+        total_row = ['合计']
+        for arch in archs:
+            total_row += [sums[arch]['baseline'], sums[arch]['actual'],
+                          total_red(arch)]
+        w.writerow(total_row)
 
 
 def main():
@@ -540,7 +533,7 @@ def main():
 
     # 从汇总文件中抽取数据生成 TSV 表格
     records = parse_summary(args.output)
-    write_data_table(records, args.data_output)
+    write_data_table(records, args.data_output, archs)
     print(f'[run_csibe_build] 共 {len(records)} 个项目, 数据表格已写入: {args.data_output}')
 
 

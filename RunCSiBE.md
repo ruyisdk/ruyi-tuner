@@ -10,7 +10,7 @@ python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/compiler/ --baselin
 
 本次测试采用的是LLVM22.1.0-rc2的x86、RISC-V和AArch64版本，其中RISC-V和AArch64为交叉工具链（宿主x86_64），AArch64命令需要在 --c_flags 中显式添加 --target=aarch64-unknown-linux-gnu。
 
-如需把优化工具链与基线工具链分开（例如基线用普通构建、pass 评分与训练用带 stats 的构建），用 scripts/run_csibe.py 或 scripts/run_csibe_build.py 运行并追加 --opt_x86_path/--opt_riscv_path/--opt_aarch64_path（对应架构命令自动追加 --opt_tools_path）。
+如需把优化工具链与基线工具链分开（例如基线用普通工具链、pass 评分与训练用优化工具链），用 scripts/run_csibe_build.py 运行并追加 --opt_x86_path/--opt_riscv_path/--opt_aarch64_path（对应架构命令自动追加 --opt_tools_path）。
 
 具体如下：
 

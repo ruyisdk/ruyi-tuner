@@ -166,4 +166,6 @@
 - Readme 批量运行脚本小节的架构差异说明扩写：补充 aarch64 --target 与 riscv --sysroot 两个交叉工具链特殊参数的成因说明（aarch64 工具链默认 triple 为 unknown；riscv 工具链默认头文件是裸机 newlib、缺 glibc 头文件）与手工单项目运行 ruyituner.py 的示例命令，并说明这两个参数为何放在批量脚本统一追加而不进 ruyituner.py 自动处理（保持其架构无关的通用性）。
 - Readme 第 8 节清理：删除已不适用的“Makefile.in 解析规则”段落（抽取逻辑已上收至 ruyituner.py，解析规则与参数覆盖说明在第 1 节参数说明中已有，此处仅剩历史说明），批量运行示例注释改为“编译参数由 ruyituner 自动解析 Makefile.in”的表述。
 - ruyituner.py 改为行缓冲输出（sys.stdout.reconfigure(line_buffering=True)）：print 接入管道时默认块缓冲，会把 ruyituner 自身的横幅/阶段标题排在子脚本 (train.py/run.py/real_compile.py) 输出之后，重定向日志时顺序错乱；改为行缓冲后与子脚本输出顺序一致（run_csibe.py 以 -u 调用、不受影响）。
+- 修复 scripts/run_csibe_build.py 与 scripts/run_csibe.py 数据表格列与 --only_arch 不一致的问题：write_data_table 的表头/数据行/合计行原来写死 x86/riscv/aarch64 三组列，--only_arch 只跑一个架构时表格仍列出未运行架构的空列；改为按本次实际运行的架构列表动态生成（表头、数据行与合计行只列参与运行的架构）；Readme 批量运行脚本小节的数据表格列说明同步补充。
+- 删除 scripts/run_csibe.py 与 scripts/run_csibe_auto.py：批量运行与数据表格生成统一由 scripts/run_csibe_build.py 承接（该脚本自成一体、只以子进程调用 ruyituner.py，编译参数由 ruyituner.py 自动解析 Makefile.in）；Readme 删除原第 7 节“CSiBE 批量运行脚本（scripts/run_csibe.py）”全文与项目结构树中两个脚本及 CSiBE_Step3_summary.txt/CSiBE_data_summary.tsv 条目，原第 8 节顺延为第 7 节并更新对已删除脚本的引用；RunCSiBE.md 引言中 run_csibe.py 的引用改为 run_csibe_build.py。
 
