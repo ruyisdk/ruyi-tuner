@@ -340,13 +340,12 @@ def write_data_table(records, out_path, archs):
 
     archs 为本次实际运行的架构列表 (如 --only_arch x86 时只有 x86), 表头、
     数据行与合计行只列出这些架构; 列为 项目名称 + 每个架构三列 (基线大小/
-    实际编译后总大小/实际代码体积缩减率); 缩减率带 % 号; 合计行各架构分别
-    求和, 缩减率按 (1 − 实际编译后总大小合计/基线大小合计) 换算 (基线合计
-    为 0 时留空)."""
+    优化后大小/代码体积缩减率); 缩减率带 % 号; 合计行各架构分别求和,
+    缩减率按 (1 − 优化后大小合计/基线大小合计) 换算 (基线合计为 0 时留空)."""
     header = ['项目名称']
     for arch in archs:
-        header += [f'{arch}基线大小', f'{arch}实际编译后总大小',
-                   f'{arch}实际代码体积缩减率(%)']
+        header += [f'{arch}基线大小', f'{arch}优化后大小',
+                   f'{arch}代码体积缩减率(%)']
     sums = {arch: {'baseline': 0, 'actual': 0} for arch in archs}
 
     def fmt_red(d):
