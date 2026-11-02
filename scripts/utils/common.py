@@ -65,8 +65,12 @@ def _parse_obj_text_size(obj_path, llvm_size_path):
     '''用 llvm-size 解析 .o 的 .text 段大小(字节); 空文件返回 0, 失败返回 None.'''
     if not os.path.isfile(obj_path) or os.path.getsize(obj_path) == 0:
         return 0
-    r = subprocess.run([llvm_size_path, obj_path],
-                       capture_output=True, text=True)
+    try:
+        r = subprocess.run([llvm_size_path, obj_path],
+                           capture_output=True, text=True, timeout=_tool_timeout())
+    except subprocess.TimeoutExpired:
+        _report_opt_failure('llvm-size(timeout)', '')
+        return None
     if r.returncode != 0:
         _report_opt_failure('llvm-size', r.stderr)
         return None
@@ -96,11 +100,15 @@ def get_object_size(ir_code, tools_path=None):
     try:
         r = subprocess.run([llc_path, '-relocation-model=pic', '-filetype=obj',
                             '-o', obj_path, '-'],
-                           input=ir_code, capture_output=True, text=True)
+                           input=ir_code, capture_output=True, text=True,
+                           timeout=_tool_timeout())
         if r.returncode != 0:
             _report_opt_failure('llc:filetype=obj', r.stderr)
             return None
         return _parse_obj_text_size(obj_path, llvm_size_path)
+    except subprocess.TimeoutExpired:
+        _report_opt_failure('llc:filetype=obj(timeout)', '')
+        return None
     except FileNotFoundError:
         return None
     finally:
@@ -132,7 +140,12 @@ def get_c_object_size(src_path, tools_path=None, opt_level='Oz',
         if c_std is not None:
             cmd.append(f'-std={c_std}')
         cmd += [src_path, '-o', obj_path]
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd,
+                               timeout=_tool_timeout())
+        except subprocess.TimeoutExpired:
+            _report_opt_failure(f'clang -{opt_level} -c(timeout)', '')
+            return None
         if r.returncode != 0:
             _report_opt_failure(f'clang -{opt_level} -c', r.stderr)
             return None
@@ -380,6 +393,19 @@ def _report_opt_failure(pipeline, stderr_text):
     print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
 
 
+# 工具子进程超时(秒): 防止个别 pass/序列挂起时批量任务永久阻塞.
+# 单次 opt+llc+llvm-size 实测约 1s, 默认 180s 富余足够, 环境变量可覆盖
+_DEFAULT_TOOL_TIMEOUT = 180.0
+
+
+def _tool_timeout():
+    try:
+        return float(os.environ.get('RUYITUNER_TOOL_TIMEOUT',
+                                    _DEFAULT_TOOL_TIMEOUT))
+    except ValueError:
+        return _DEFAULT_TOOL_TIMEOUT
+
+
 # 合法的优化等级写法: "-Oz" 或 "default<Oz>" (opt 管道形式), 用于基线评分
 _OPT_LEVEL_FLAGS = ('-O0', '-O1', '-O2', '-O3', '-Os', '-Oz',
                     'default<O0>', 'default<O1>', 'default<O2>',
@@ -398,9 +424,10 @@ def _count_after_opt(after_ll_code, original_ir_code, tools_path, count_mode):
         return get_inst_count(original_ir_code, tools_path, count_mode=count_mode)
 
 
-def get_instrcount(ir_code, opt_flags, tools_path, count_mode='auto'):
+def get_instrcount(ir_code, opt_flags, tools_path, count_mode='auto', timed_out=None):
     #统计IR指令数，这里是做了统计指令数的集中情况的预处理，真正最终统计指令数是在get_inst_count里最终落地
     #count_mode 计数方式开关 (见 get_inst_count): 'auto' | 'opt-stats' | 'text' | 'obj-size'
+    #timed_out 非 None 时把超时管线中的 pass 记入该集合 (供训练阶段黑名单跳过)
 
     pipeline = ",".join(opt_flags)
     opt_path = os.path.join(tools_path, "opt") if tools_path else "opt"
@@ -416,9 +443,14 @@ def get_instrcount(ir_code, opt_flags, tools_path, count_mode='auto'):
             # 优化等级作为 opt 顶层参数; 目标架构由 IR 内嵌的 target triple 决定
             flag = f"-{pipeline[len('default<'):-1]}" if pipeline.startswith('default<') else pipeline
             cmd_opt = [opt_path] + [flag] + ["-S"]
-            result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            result = subprocess.run(cmd_opt, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=_tool_timeout())
             after_ll_code = result.stdout
             return _count_after_opt(after_ll_code, ir_code, tools_path, count_mode)
+        except subprocess.TimeoutExpired:
+            _report_opt_failure(f'timeout: {pipeline}', '')
+            if timed_out is not None:
+                timed_out.update(opt_flags)
+            return get_inst_count(ir_code, tools_path, count_mode=count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code, tools_path, count_mode=count_mode)
@@ -430,9 +462,14 @@ def get_instrcount(ir_code, opt_flags, tools_path, count_mode='auto'):
         pipeline = fix_loop_nesting(pipeline)
         cmd_opt = f'{opt_path} -S "-passes={pipeline}"'
         try:
-            result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            result = subprocess.run(cmd_opt, shell=True, input=input_code_io.getvalue(), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=_tool_timeout())
             after_ll_code = result.stdout
             return _count_after_opt(after_ll_code, ir_code, tools_path, count_mode)
+        except subprocess.TimeoutExpired:
+            _report_opt_failure(f'timeout: {pipeline}', '')
+            if timed_out is not None:
+                timed_out.update(opt_flags)
+            return get_inst_count(ir_code, tools_path, count_mode=count_mode)
         except subprocess.CalledProcessError as e:
             _report_opt_failure(pipeline, e.stderr)
             return get_inst_count(ir_code, tools_path, count_mode=count_mode)

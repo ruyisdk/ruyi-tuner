@@ -22,18 +22,29 @@ class PassSyner:
 
         sinpass_ic = {}
 
+        # opt 超时黑名单: 超时过的 pass 在本文件后续不再尝试
+        timed_out = set()
+
         # find valid passes
         for action in self.Passes:
-            action_ic = get_instrcount(ll_code, [action], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
+            action_ic = get_instrcount(ll_code, [action], tools_path=self.llvm_tools_path,
+                                       count_mode=self.count_mode, timed_out=timed_out)
             sinpass_ic.update({action: action_ic})
             code_size_change = original_codesize - action_ic
             if code_size_change > 0:
                 action_aval.append(action)
 
         for action2 in action_aval:
+            if action2 in timed_out:
+                continue
             for action1 in self.Passes:
+                if action1 in timed_out:
+                    continue
                 code_size_org = sinpass_ic.get(action2)
-                code_size_now = get_instrcount(ll_code, [action1, action2], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
+                code_size_now = get_instrcount(ll_code, [action1, action2],
+                                               tools_path=self.llvm_tools_path,
+                                               count_mode=self.count_mode,
+                                               timed_out=timed_out)
                 code_size_change = code_size_org - code_size_now
                 if code_size_change > 0:
                     syner_passpairs.append((action1, action2))

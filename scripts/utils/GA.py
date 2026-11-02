@@ -130,8 +130,10 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
 
     # 遗传算法主循环
     population = generate_population(graph, nodes, population_size, max_length)
+    print(f'GA 搜索开始: 种群 {population_size}, 代数 {generations}.')
     for i in range(generations):
         fitness_scores = calculate_fitness(population)
+        print(f'GA 第 {i + 1}/{generations} 代: 当前最优缩减率 {fitness_scores[0][0] * 100:.2f}%')
         selected = selection(fitness_scores, selection_rate)
         next_population = []
         while len(next_population) < population_size:
@@ -141,6 +143,7 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
             next_population.append(mutate(child2, mutation_rate))
         population = next_population
     final_fitness_scores = calculate_fitness(population)
+    print(f'GA 搜索完成: 最优缩减率 {final_fitness_scores[0][0] * 100:.2f}%')
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
 
 

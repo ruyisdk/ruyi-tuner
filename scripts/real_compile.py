@@ -29,7 +29,7 @@ project_root = os.path.dirname(os.path.dirname(current_file_path))
 sys.path.insert(0, os.path.dirname(current_file_path))
 sys.path.append(project_root)
 
-from utils.common import find_clang, fix_loop_nesting, get_object_file_text_size
+from utils.common import find_clang, fix_loop_nesting, get_object_file_text_size, _tool_timeout
 
 
 def real_compile_with_seq(src_root, ll_items, obj_dir, clang, opt_tools_path,
@@ -58,24 +58,33 @@ def real_compile_with_seq(src_root, ll_items, obj_dir, clang, opt_tools_path,
             opt_ll = os.path.join(work, 'opt.ll')
             proc = subprocess.run([opt_path, '-S', f'-passes={seq_fixed}',
                                    ll_path, '-o', opt_ll],
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True,
+                                  timeout=_tool_timeout())
             if proc.returncode == 0:
                 proc = subprocess.run([llc_path, '-relocation-model=pic',
                                        '-filetype=obj', opt_ll, '-o', dst],
-                                      capture_output=True, text=True)
+                                      capture_output=True, text=True,
+                                      timeout=_tool_timeout())
                 if proc.returncode == 0:
                     size = get_object_file_text_size(dst, opt_tools_path)
                     if size is not None:
                         return rel, size, ''
-            # 序列管线失败: 回退 clang 直通编译 (用 C→IR 转换的优化等级, 保证构建产物完整)
-            fb = [clang, f'-{ir_opt_level}', '-c']
-            if c_flags:
-                fb += shlex.split(c_flags)
-            if c_std is not None:
-                fb.append(f'-std={c_std}')
-            fb += [src, '-o', dst]
-            # 在数据集根目录下执行, 使 c_flags 中的相对路径以数据集根目录为基准解析
-            proc = subprocess.run(fb, capture_output=True, text=True, cwd=src_root)
+        except subprocess.TimeoutExpired:
+            pass
+        # 序列管线失败(含超时): 回退 clang 直通编译 (用 C→IR 转换的优化等级, 保证构建产物完整)
+        fb = [clang, f'-{ir_opt_level}', '-c']
+        if c_flags:
+            fb += shlex.split(c_flags)
+        if c_std is not None:
+            fb.append(f'-std={c_std}')
+        fb += [src, '-o', dst]
+        # 在数据集根目录下执行, 使 c_flags 中的相对路径以数据集根目录为基准解析
+        try:
+            try:
+                proc = subprocess.run(fb, capture_output=True, text=True, cwd=src_root,
+                                      timeout=_tool_timeout())
+            except subprocess.TimeoutExpired:
+                return rel, None, '回退直通编译超时'
             if proc.returncode != 0:
                 lines = [line for line in proc.stderr.splitlines() if line.strip()]
                 return rel, None, lines[-1] if lines else f'exit={proc.returncode}'

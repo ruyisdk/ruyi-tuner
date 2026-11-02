@@ -169,4 +169,5 @@
 - 修复 scripts/run_csibe_build.py 与 scripts/run_csibe.py 数据表格列与 --only_arch 不一致的问题：write_data_table 的表头/数据行/合计行原来写死 x86/riscv/aarch64 三组列，--only_arch 只跑一个架构时表格仍列出未运行架构的空列；改为按本次实际运行的架构列表动态生成（表头、数据行与合计行只列参与运行的架构）；Readme 批量运行脚本小节的数据表格列说明同步补充。
 - 删除 scripts/run_csibe.py 与 scripts/run_csibe_auto.py：批量运行与数据表格生成统一由 scripts/run_csibe_build.py 承接（该脚本自成一体、只以子进程调用 ruyituner.py，编译参数由 ruyituner.py 自动解析 Makefile.in）；Readme 删除原第 7 节“CSiBE 批量运行脚本（scripts/run_csibe.py）”全文与项目结构树中两个脚本及 CSiBE_Step3_summary.txt/CSiBE_data_summary.tsv 条目，原第 8 节顺延为第 7 节并更新对已删除脚本的引用；RunCSiBE.md 引言中 run_csibe.py 的引用改为 run_csibe_build.py。
 - scripts/run_csibe_build.py 数据表格列名更新：TSV 表头由“<架构>实际编译后总大小 / <架构>实际代码体积缩减率(%)”改为“<架构>优化后大小 / <架构>代码体积缩减率(%)”（与 GA 优化阶段输出的 Optimized Size / Reduction Rate 口径一致），write_data_table 的 docstring 同步更新。
+- 新增工具子进程超时与进度输出（与 spacebornecompiler 对齐）：opt/llc/clang/llvm-size 统一加超时（默认 180 秒，`RUYITUNER_TOOL_TIMEOUT` 可覆盖），超时按失败回退，防止个别 pass/序列挂起导致批量任务永久阻塞；训练阶段维护超时 pass 黑名单（同一 pass 超时一次后本文件不再重复尝试）；GA 搜索打印代数级进度；Readme 环境变量说明同步更新。
 

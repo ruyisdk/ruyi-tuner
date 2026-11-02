@@ -32,7 +32,7 @@ sys.path.append(project_root)
 sys.path.insert(0, os.path.dirname(current_file_path))
 
 from utils.PassSyner import PassSyner
-from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt, dataset_output_name
+from utils.common import get_inst_count, get_inst_count_method, check_dataset_arch_matches_opt, dataset_output_name, _tool_timeout
 
 # ============================================================================
 # pass 列表生成
@@ -143,8 +143,12 @@ def check_runtime(opt_path, task):
     """用测试 IR 实际运行一次 pass, 返回 (category, name, ok, reason, output_ir)"""
     category, name = task
     pass_str = f'{category}({name})'
-    r = subprocess.run([opt_path, '-S', f'-passes={pass_str}'],
-                       input=TEST_IR, capture_output=True, text=True)
+    try:
+        r = subprocess.run([opt_path, '-S', f'-passes={pass_str}'],
+                           input=TEST_IR, capture_output=True, text=True,
+                           timeout=_tool_timeout())
+    except subprocess.TimeoutExpired:
+        return category, name, False, '运行超时', None
     if r.returncode != 0:
         reason = extract_error_reason(r.stderr) or f'exit code {r.returncode}'
         return category, name, False, reason, None
@@ -169,8 +173,12 @@ def parse_check(opt_path, ir):
 
     替代原来的 libAutophase 解析检查: 训练/优化时输出 IR 会被同版本的 opt
     再次处理, 因此只需保证输出 IR 能被 opt 解析即可. """
-    r = subprocess.run([opt_path, '-disable-output', '-'],
-                       input=ir, capture_output=True, text=True)
+    try:
+        r = subprocess.run([opt_path, '-disable-output', '-'],
+                           input=ir, capture_output=True, text=True,
+                           timeout=_tool_timeout())
+    except subprocess.TimeoutExpired:
+        return False, '运行超时'
     if r.returncode == 0:
         return True, None
     reason = extract_error_reason(r.stderr) or f'exit code {r.returncode}'

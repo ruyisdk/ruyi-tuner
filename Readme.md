@@ -26,7 +26,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
   - 不同构建之间的区别仅在于指令计数方式：使用 `-DLLVM_FORCE_ENABLE_STATS=ON`（或 `-DLLVM_ENABLE_ASSERTIONS=ON`）构建的 opt 可通过 `opt -passes=instcount -stats` 进行指令计数；使用未启用统计（如默认 Release）构建的 opt 时，RuyiTuner 会自动回退为对 IR 文本的统计。两种方式计数结果基本一致，互不影响正确性。
   - RuyiTuner 支持基线/优化两条独立工具链：`--baseline_tools_path` 为基线工具链（用于基线的直接编译/统计），`--opt_tools_path` 为优化工具链（用于 clang/opt/llc 三段过程），缺省与基线工具链相同；原参数名 `--llvm_tools_path` 已更名为 `--baseline_tools_path`（旧名兼容保留）。
   - RuyiTuner 输入文件为 LLVM IR（`--input_type ll`）：优化工具链仅需 opt；输入文件为 C 源码（`--input_type c`，支持 .c 与预处理后的 .i）：优化工具链还需 clang（`ninja clang`），用于先将源文件编译为 .ll 再走后续训练与优化流程。计数方式使用 `--count_mode obj-size`（统计 .o 文件 .text 段字节大小）：优化工具链还需 llc 与 llvm-size（`ninja llc llvm-size`），基线工具链需 clang（直接编译源码成 .o 统计基线）。
-- 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。
+- 环境变量（可选）：opt 执行失败时默认静默处理（自动回退为原始 IR 计数），设置 `RUYITUNER_SHOW_OPT_FAILURES=1` 可恢复逐条失败信息输出，便于排查崩溃的 pass 组合。生成 pass 列表时被剔除 pass 的具体清单与原因默认不打印（仅输出剔除数量），设置 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 可恢复逐条输出，便于排查被剔除的 pass。opt/llc/clang/llvm-size 等工具子进程的超时秒数默认 180（`RUYITUNER_TOOL_TIMEOUT` 可覆盖），超时按失败回退，防止个别 pass/序列挂起导致批量任务永久阻塞；训练阶段对超时的 pass 按文件维护黑名单（同一 pass 超时一次后本文件不再重复尝试），GA 搜索逐代打印当前最优缩减率。
 
 ## 项目结构
 
