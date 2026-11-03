@@ -29,11 +29,17 @@ def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
 
 
 def _ga_search(graph, nodes, fitness_function, population_size=100, generations=10,
-               mutation_rate=0.5, selection_rate=0.1, max_length=2):
+               mutation_rate=0.5, selection_rate=0.1, max_length=2, seed_paths=None):
     """遗传算法搜索最优 pass 序列 (单文件与项目两种模式共用).
 
-    fitness_function(path) 返回 (得分, 路径); 本函数返回 (最优得分, 最优路径)."""
+    fitness_function(path) 返回 (得分, 路径); 本函数返回 (最优得分, 最优路径).
+    seed_paths: 可选, 每代固定保留在种群中的种子序列 (项目模式硬约束重搜时用
+    空序列兜底, 保证种群中始终至少有一个已知可用个体); 不传时行为不变."""
     import random
+
+    def rate_text(score):
+        # 硬约束适应度下不可行个体得分为 -inf, 进度输出单独标注为"不可行"
+        return '不可行' if score == float('-inf') else f'{score * 100:.2f}%'
 
     # 初始种群生成
     def generate_population(graph, nodes, size, max_length):
@@ -130,10 +136,13 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
 
     # 遗传算法主循环
     population = generate_population(graph, nodes, population_size, max_length)
+    # 种子序列固定占种群末尾若干位, 保证每代都有已知可用个体参与进化
+    if seed_paths:
+        population = population[:population_size - len(seed_paths)] + list(seed_paths)
     print(f'GA 搜索开始: 种群 {population_size}, 代数 {generations}.')
     for i in range(generations):
         fitness_scores = calculate_fitness(population)
-        print(f'GA 第 {i + 1}/{generations} 代: 当前最优缩减率 {fitness_scores[0][0] * 100:.2f}%')
+        print(f'GA 第 {i + 1}/{generations} 代: 当前最优缩减率 {rate_text(fitness_scores[0][0])}')
         selected = selection(fitness_scores, selection_rate)
         next_population = []
         while len(next_population) < population_size:
@@ -141,9 +150,10 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
             child1, child2 = crossover(parent1, parent2)
             next_population.append(mutate(child1, mutation_rate))
             next_population.append(mutate(child2, mutation_rate))
-        population = next_population
+        population = (next_population[:population_size - len(seed_paths)] + list(seed_paths)
+                      if seed_paths else next_population)
     final_fitness_scores = calculate_fitness(population)
-    print(f'GA 搜索完成: 最优缩减率 {final_fitness_scores[0][0] * 100:.2f}%')
+    print(f'GA 搜索完成: 最优缩减率 {rate_text(final_fitness_scores[0][0])}')
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
 
 
@@ -199,6 +209,40 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         return best_path, best_cost, baseline_count, after_count
 
 
+def _find_crashing_passes(path, failing_indices, codes, llvm_tools_path, count_mode):
+    """定位单独运行即触发失败的 pass (硬约束重搜的元凶).
+
+    最优序列整条管线在失败文件上崩溃, 元凶通常只是其中个别 pass: 对序列中的
+    每个 pass (去重保序) 逐个在失败文件上单独运行, 单独运行即失败的 pass 即为
+    元凶; 一个 pass 确认会在某个失败文件上崩溃后即不再测试其余失败文件."""
+    culprits = set()
+    for p in dict.fromkeys(path):
+        for index in failing_indices:
+            ok = [True]
+            get_instrcount(codes[index], [p], tools_path=llvm_tools_path,
+                           count_mode=count_mode, ok_out=ok)
+            if not ok[0]:
+                culprits.add(p)
+                break
+    return culprits
+
+
+def _graph_without(graph, nodes, excluded):
+    """返回剔除 excluded 中 pass 后的搜索图与节点集.
+
+    重搜前把定位到的崩溃 pass 从图中剔除, 使 GA 种群不再被含这些 pass 的不可行
+    个体稀释; 节点集保留所有未剔除 pass (单 pass 序列仍然合法)."""
+    clean_graph = defaultdict(list)
+    for start, ends in graph.items():
+        if start in excluded:
+            continue
+        kept = [e for e in ends if e not in excluded]
+        if kept:
+            clean_graph[start] = kept
+    clean_nodes = {n for n in nodes if n not in excluded}
+    return clean_graph, clean_nodes
+
+
 def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_level='Oz', count_mode='auto', max_path_length=2, baseline_srcs=None, baseline_tools_path=None):
     """为项目(全部输入文件)寻找一条公共的最优 pass 序列 (聚合适应度 GA).
 
@@ -210,12 +254,17 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     适应度 = (Σ基线 - Σ优化后) / Σ基线, 即按文件大小加权的整体缩减率,
     与调用方的汇总口径一致; 序列在个别文件上 opt 失败时回退原始 IR 计数
     (视为无收益, 自然被惩罚);
+    若最优序列在个别文件上 opt 失败 (真实编译阶段会回退直通编译, 项目内出现
+    混合编译口径), 则先定位单独运行即失败的元凶 pass, 把这些 pass 从搜索图中
+    剔除后, 在干净图上按"全文件可用"硬约束重搜一条对所有文件都适用的公共序列
+    (以空序列兜底, 找不到更好的全可用序列时输出空路径与 0 分);
     基线为 0 的文件跳过; 无可评分文件或协同对列表为空时返回空路径与 0 分;
     返回 (最优路径, 得分, 总基线大小, 总优化后大小)."""
     if baseline_srcs is None:
         baseline_srcs = [None] * len(file_codes)
     # 逐文件计算基线, 基线为 0 的文件跳过
     codes = []
+    names = []
     bases = []
     for (name, ll_code), baseline_src in zip(file_codes, baseline_srcs):
         base = _compute_baseline(ll_code, llvm_tools_path, opt_level,
@@ -225,6 +274,7 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
             print(f"{name}: {opt_level} 基线为 0, 跳过该文件.")
             continue
         codes.append(ll_code)
+        names.append(name)
         bases.append(base)
     if not codes:
         print("没有基线非 0 的文件, 无法为项目寻找公共 pass 序列.")
@@ -251,8 +301,8 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     SELECTION_RATE = 0.1
     # 序列最大长度由 max_path_length 参数控制 (默认 2)
 
-    # (文件下标, 序列) -> 优化后大小 的缓存: 不同个体/代数之间的序列大量重复,
-    # 缓存可避免重复运行 opt; 多线程下加锁避免同一序列重复计算
+    # (文件下标, 序列) -> (优化后大小, opt 管线是否成功) 的缓存: 不同个体/代数
+    # 之间的序列大量重复, 缓存可避免重复运行 opt; 多线程下加锁避免同一序列重复计算
     import threading
     size_cache = {}
     cache_lock = threading.Lock()
@@ -263,22 +313,68 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
             cached = size_cache.get(key)
         if cached is not None:
             return cached
-        size = get_instrcount(codes[index], list(path), tools_path=llvm_tools_path, count_mode=count_mode)
+        ok = [True]
+        size = get_instrcount(codes[index], list(path), tools_path=llvm_tools_path,
+                              count_mode=count_mode, ok_out=ok)
         with cache_lock:
-            size_cache[key] = size
-        return size
+            size_cache[key] = (size, ok[0])
+        return size, ok[0]
 
     # 聚合适应度: 全项目整体缩减率, 允许个别文件为负 (拖累其他文件的序列被自然惩罚)
     def aggregate_fitness(path):
         total_after = 0
         for index in range(len(codes)):
-            total_after += file_size(index, path)
+            size, _ok = file_size(index, path)
+            total_after += size
+        return (total_baseline - total_after) / total_baseline, path
+
+    # 硬约束适应度: 任一文件的 opt 管线失败 (真实编译将回退直通编译) 时整个序列
+    # 判为不可行 (-inf), 保证最终序列对所有文件可用、项目内编译口径一致
+    def feasible_fitness(path):
+        total_after = 0
+        for index in range(len(codes)):
+            size, ok = file_size(index, path)
+            if not ok:
+                return float('-inf'), path
+            total_after += size
         return (total_baseline - total_after) / total_baseline, path
 
     best_cost, best_path = _ga_search(graph, nodes, aggregate_fitness,
                                       population_size=POPULATION_SIZE, generations=GENERATIONS,
                                       mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
                                       max_length=max_path_length)
+    # 最优序列若在个别文件上 opt 失败, 真实编译阶段只能对这些文件回退直通编译,
+    # 项目内出现混合编译口径; 此时先定位元凶 pass, 再在剔除元凶的干净图上重搜
+    failed_indices = [i for i in range(len(codes)) if not file_size(i, best_path)[1]]
+    if failed_indices:
+        failed_names = [names[i] for i in failed_indices]
+        shown = ', '.join(failed_names[:5]) + (' ...' if len(failed_names) > 5 else '')
+        print(f'最优序列在 {len(failed_names)} 个文件上 opt 失败 ({shown}),'
+              f' 改按"全文件可用"硬约束重搜.')
+        # 软约束最优序列 (含失败文件, 重搜前的解) 一并输出, 与最终 Path 行同格式,
+        # 便于对照重搜前后的序列变化
+        print('Path: ', best_path)
+        culprits = _find_crashing_passes(best_path, failed_indices, codes,
+                                         llvm_tools_path, count_mode)
+        if culprits:
+            print(f'定位到 {len(culprits)} 个单独运行即崩溃的 pass: {sorted(culprits)},'
+                  f' 重搜前从搜索图中剔除.')
+            search_graph, search_nodes = _graph_without(graph, nodes, culprits)
+        else:
+            print('未定位到单独运行即崩溃的 pass, 保持完整搜索图重搜.')
+            search_graph, search_nodes = graph, nodes
+        if not search_nodes:
+            print('剔除崩溃 pass 后搜索图为空, 无可用公共序列, 按空序列输出.')
+            hard_cost, hard_path = 0.0, []
+        else:
+            hard_cost, hard_path = _ga_search(search_graph, search_nodes, feasible_fitness,
+                                              population_size=POPULATION_SIZE, generations=GENERATIONS,
+                                              mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
+                                              max_length=max_path_length, seed_paths=[()])
+        if hard_cost == float('-inf'):
+            print('未找到对所有文件都可用的序列, 保持原最优序列 (失败文件按无收益计分).')
+        else:
+            best_cost, best_path = hard_cost, hard_path
     # 输出时加非负约束 (与单文件模式一致): 最优得分为负时按无收益输出空路径与 0 分
     if best_cost < 0:
         return [], 0.0, total_baseline, total_baseline
