@@ -29,12 +29,18 @@ def _compute_baseline(ll_code, llvm_tools_path, opt_level, count_mode,
 
 
 def _ga_search(graph, nodes, fitness_function, population_size=100, generations=10,
-               mutation_rate=0.5, selection_rate=0.1, max_length=2, seed_paths=None):
+               mutation_rate=0.5, selection_rate=0.1, max_length=2, seed_paths=None,
+               failure_sink=None, prune_callback=None):
     """遗传算法搜索最优 pass 序列 (单文件与项目两种模式共用).
 
     fitness_function(path) 返回 (得分, 路径); 本函数返回 (最优得分, 最优路径).
     seed_paths: 可选, 每代固定保留在种群中的种子序列 (项目模式硬约束重搜时用
-    空序列兜底, 保证种群中始终至少有一个已知可用个体); 不传时行为不变."""
+    空序列兜底, 保证种群中始终至少有一个已知可用个体); 不传时行为不变.
+    failure_sink: 可选, 共享列表, 适应度函数把 opt 失败观测 (路径, 失败文件
+    下标) 追加进来; 每代适应度评估后检查新观测并交给 prune_callback 处理.
+    prune_callback: 可选, 函数 (新失败观测, 当前图, 当前节点集) -> (新图, 新
+    节点集); 返回的图与当前不同 (剔除了崩溃 pass) 时重建种群并在干净图上重新
+    开始代数计数; 两个参数成对使用, 实现搜索中途的崩溃 pass 剔除."""
     import random
 
     def rate_text(score):
@@ -43,7 +49,6 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
 
     # 初始种群生成
     def generate_population(graph, nodes, size, max_length):
-        random.seed(1234)
         population = []
         for index in range(size):
             path = []
@@ -135,14 +140,38 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
         return path
 
     # 遗传算法主循环
+    random.seed(1234)  # 固定随机种子: 同图同参数下多次搜索结果一致
     population = generate_population(graph, nodes, population_size, max_length)
     # 种子序列固定占种群末尾若干位, 保证每代都有已知可用个体参与进化
     if seed_paths:
         population = population[:population_size - len(seed_paths)] + list(seed_paths)
     print(f'GA 搜索开始: 种群 {population_size}, 代数 {generations}.')
-    for i in range(generations):
+    fail_cursor = 0
+    generation = 0
+    while generation < generations:
         fitness_scores = calculate_fitness(population)
-        print(f'GA 第 {i + 1}/{generations} 代: 当前最优缩减率 {rate_text(fitness_scores[0][0])}')
+        print(f'GA 第 {generation + 1}/{generations} 代: 当前最优缩减率 {rate_text(fitness_scores[0][0])}')
+        # 每代评估后检查新的 opt 失败观测: 定位元凶并剔除; 图确有变化时在干净图
+        # 上重建种群、代数从头计数, 使剔除后的搜索预算不被含元凶的旧个体浪费
+        if failure_sink is not None and prune_callback is not None:
+            new_failures = failure_sink[fail_cursor:]
+            fail_cursor = len(failure_sink)
+            if new_failures:
+                new_graph, new_nodes = prune_callback(new_failures, graph, nodes)
+                if new_nodes != nodes or new_graph != graph:
+                    graph, nodes = new_graph, new_nodes
+                    if not nodes:
+                        # 崩溃 pass 全部剔除后图已空: 无可用序列, 提前结束搜索
+                        # (空路径兜底由调用方处理)
+                        print('崩溃 pass 剔除后搜索图为空, 搜索提前结束.')
+                        break
+                    population = generate_population(graph, nodes, population_size, max_length)
+                    if seed_paths:
+                        population = (population[:population_size - len(seed_paths)]
+                                      + list(seed_paths))
+                    generation = 0
+                    print('崩溃 pass 已从搜索图剔除, 在干净图上重新开始搜索.')
+                    continue
         selected = selection(fitness_scores, selection_rate)
         next_population = []
         while len(next_population) < population_size:
@@ -152,6 +181,7 @@ def _ga_search(graph, nodes, fitness_function, population_size=100, generations=
             next_population.append(mutate(child2, mutation_rate))
         population = (next_population[:population_size - len(seed_paths)] + list(seed_paths)
                       if seed_paths else next_population)
+        generation += 1
     final_fitness_scores = calculate_fitness(population)
     print(f'GA 搜索完成: 最优缩减率 {rate_text(final_fitness_scores[0][0])}')
     return final_fitness_scores[0][0], final_fitness_scores[0][1]
@@ -209,28 +239,48 @@ def LeverageSyner_GA_codesize_file(edges, ll_code, llvm_tools_path, opt_level='O
         return best_path, best_cost, baseline_count, after_count
 
 
-def _find_crashing_passes(path, failing_indices, codes, llvm_tools_path, count_mode):
-    """定位单独运行即触发失败的 pass (硬约束重搜的元凶).
+def _find_crashing_passes(observations, codes, llvm_tools_path, count_mode,
+                          probe=None, num_workers=16):
+    """定位单独运行即触发失败的 pass (崩溃元凶).
 
-    最优序列整条管线在失败文件上崩溃, 元凶通常只是其中个别 pass: 对序列中的
-    每个 pass (去重保序) 逐个在失败文件上单独运行, 单独运行即失败的 pass 即为
-    元凶; 一个 pass 确认会在某个失败文件上崩溃后即不再测试其余失败文件."""
+    observations: [(路径, 失败文件下标列表), ...] 的 opt 失败观测; 整条管线在
+    失败文件上崩溃, 元凶通常只是其中个别 pass: 对所有失败序列中出现过的 pass
+    (去重保序) 逐个在失败文件上单独运行, 单独运行即失败的 pass 即为元凶; 一个
+    pass 确认会在某个失败文件上崩溃后即不再测试其余失败文件.
+    probe: 可选, 函数 (文件下标, [pass]) -> (大小, opt 管线是否成功), 用于
+    复用调用方带缓存的评估函数, 避免重复运行 opt."""
+    candidates = []
+    for path, _bad in observations:
+        for p in path:
+            if p not in candidates:
+                candidates.append(p)
+
+    def _probe_pass(p):
+        for _path, bad in observations:
+            for index in bad:
+                if probe is not None:
+                    _size, ok = probe(index, [p])
+                else:
+                    ok = [True]
+                    get_instrcount(codes[index], [p], tools_path=llvm_tools_path,
+                                   count_mode=count_mode, ok_out=ok)
+                    ok = ok[0]
+                if not ok:
+                    return p
+        return None
+
     culprits = set()
-    for p in dict.fromkeys(path):
-        for index in failing_indices:
-            ok = [True]
-            get_instrcount(codes[index], [p], tools_path=llvm_tools_path,
-                           count_mode=count_mode, ok_out=ok)
-            if not ok[0]:
-                culprits.add(p)
-                break
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        for culprit in executor.map(_probe_pass, candidates):
+            if culprit is not None:
+                culprits.add(culprit)
     return culprits
 
 
 def _graph_without(graph, nodes, excluded):
     """返回剔除 excluded 中 pass 后的搜索图与节点集.
 
-    重搜前把定位到的崩溃 pass 从图中剔除, 使 GA 种群不再被含这些 pass 的不可行
+    把定位到的崩溃 pass 从图中剔除, 使 GA 种群不再被含这些 pass 的不可行
     个体稀释; 节点集保留所有未剔除 pass (单 pass 序列仍然合法)."""
     clean_graph = defaultdict(list)
     for start, ends in graph.items():
@@ -254,10 +304,12 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     适应度 = (Σ基线 - Σ优化后) / Σ基线, 即按文件大小加权的整体缩减率,
     与调用方的汇总口径一致; 序列在个别文件上 opt 失败时回退原始 IR 计数
     (视为无收益, 自然被惩罚);
-    若最优序列在个别文件上 opt 失败 (真实编译阶段会回退直通编译, 项目内出现
-    混合编译口径), 则先定位单独运行即失败的元凶 pass, 把这些 pass 从搜索图中
-    剔除后, 在干净图上按"全文件可用"硬约束重搜一条对所有文件都适用的公共序列
-    (以空序列兜底, 找不到更好的全可用序列时输出空路径与 0 分);
+    搜索中途一旦出现 opt 失败观测, 立即定位单独运行即失败的元凶 pass 并从搜索
+    图中剔除, 在干净图上重建种群继续搜索 (把原"最优序列失败才剔除"的操作前移);
+    若最优序列仍在个别文件上 opt 失败 (组合性崩溃, 真实编译阶段会回退直通编译,
+    项目内出现混合编译口径), 则再定位元凶 pass 从搜索图中剔除, 在干净图上按
+    "全文件可用"硬约束重搜一条对所有文件都适用的公共序列 (以空序列兜底,
+    找不到更好的全可用序列时输出空路径与 0 分);
     基线为 0 的文件跳过; 无可评分文件或协同对列表为空时返回空路径与 0 分;
     返回 (最优路径, 得分, 总基线大小, 总优化后大小)."""
     if baseline_srcs is None:
@@ -320,13 +372,42 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
             size_cache[key] = (size, ok[0])
         return size, ok[0]
 
-    # 聚合适应度: 全项目整体缩减率, 允许个别文件为负 (拖累其他文件的序列被自然惩罚)
+    # 搜索中途的 opt 失败观测共享列表: 适应度评估时把 (路径, 失败文件下标)
+    # 追加进来, _ga_search 每代评估后检查新观测并触发元凶剔除; 按观测内容去重,
+    # 避免同一序列在同一批文件上的失败被反复记录
+    failure_sink = []
+    seen_failures = set()
+
+    # 聚合适应度: 全项目整体缩减率, 允许个别文件为负 (拖累其他文件的序列被自然
+    # 惩罚); opt 失败文件回退原始 IR 计数, 同时把失败观测记录到 failure_sink
     def aggregate_fitness(path):
         total_after = 0
+        bad = []
         for index in range(len(codes)):
-            size, _ok = file_size(index, path)
+            size, ok = file_size(index, path)
             total_after += size
+            if not ok:
+                bad.append(index)
+        if bad:
+            key = (tuple(path), tuple(bad))
+            if key not in seen_failures:
+                seen_failures.add(key)
+                failure_sink.append((tuple(path), bad))
         return (total_baseline - total_after) / total_baseline, path
+
+    def prune_crashing_passes(new_failures, current_graph, current_nodes):
+        """搜索中途的崩溃 pass 剔除: 从新失败观测定位单独运行即崩溃的元凶.
+
+        命中元凶时把这些 pass 从当前搜索图剔除并返回重建后的图/节点集 (元凶
+        单独运行即失败, 不可能出现在任何全文件可用的序列中, 剔除零损失); 未
+        命中 (组合性崩溃) 时原样返回, 保持搜索继续."""
+        culprits = _find_crashing_passes(new_failures, codes, llvm_tools_path,
+                                         count_mode, probe=file_size)
+        if not culprits:
+            return current_graph, current_nodes
+        print(f'搜索中途定位到 {len(culprits)} 个单独运行即崩溃的 pass:'
+              f' {sorted(culprits)}, 从搜索图中剔除后重建种群.')
+        return _graph_without(current_graph, current_nodes, culprits)
 
     # 硬约束适应度: 任一文件的 opt 管线失败 (真实编译将回退直通编译) 时整个序列
     # 判为不可行 (-inf), 保证最终序列对所有文件可用、项目内编译口径一致
@@ -342,7 +423,9 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
     best_cost, best_path = _ga_search(graph, nodes, aggregate_fitness,
                                       population_size=POPULATION_SIZE, generations=GENERATIONS,
                                       mutation_rate=MUTATION_RATE, selection_rate=SELECTION_RATE,
-                                      max_length=max_path_length)
+                                      max_length=max_path_length,
+                                      failure_sink=failure_sink,
+                                      prune_callback=prune_crashing_passes)
     # 最优序列若在个别文件上 opt 失败, 真实编译阶段只能对这些文件回退直通编译,
     # 项目内出现混合编译口径; 此时先定位元凶 pass, 再在剔除元凶的干净图上重搜
     failed_indices = [i for i in range(len(codes)) if not file_size(i, best_path)[1]]
@@ -354,8 +437,8 @@ def LeverageSyner_GA_codesize_project(edges, file_codes, llvm_tools_path, opt_le
         # 软约束最优序列 (含失败文件, 重搜前的解) 一并输出, 与最终 Path 行同格式,
         # 便于对照重搜前后的序列变化
         print('Path: ', best_path)
-        culprits = _find_crashing_passes(best_path, failed_indices, codes,
-                                         llvm_tools_path, count_mode)
+        culprits = _find_crashing_passes([(best_path, failed_indices)], codes,
+                                         llvm_tools_path, count_mode, probe=file_size)
         if culprits:
             print(f'定位到 {len(culprits)} 个单独运行即崩溃的 pass: {sorted(culprits)},'
                   f' 重搜前从搜索图中剔除.')
