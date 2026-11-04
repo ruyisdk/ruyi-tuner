@@ -186,6 +186,7 @@ def build_train_cmd(args, dataset, project_name):
            '--opt_tools_path', args.opt_tools_path,
            '--num_workers', str(args.num_workers),
            '--count_mode', args.count_mode,
+           '--search_scope', args.search_scope,
            '--project_name', project_name]
     if args.output_dir is not None:
         cmd += ['--output_dir', args.output_dir]

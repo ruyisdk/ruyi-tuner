@@ -307,6 +307,8 @@ args.add_argument("--keep_instrumentation", action='store_true', help="keep inst
 args.add_argument("--extra_exclude", type=str, default=None, help="extra exclude rules for the generated pass list (regex)")
 args.add_argument("--count_mode", type=str, default='auto', choices=['auto', 'opt-stats', 'text', 'obj-size'],
                   help="instruction counting mode: auto (default) | opt-stats | text | obj-size")
+args.add_argument("--search_scope", type=str, default='file', choices=['file', 'project'],
+                  help="pair finding scope: file (default, crashing passes excluded per file) or project (passes crashing on any file are globally excluded from the final pair list)")
 args.add_argument("--project_name", type=str, default=None, help="project name used to name the output CSV (default: derived from the dataset directory or file name)")
 args = args.parse_args()
 
@@ -345,7 +347,7 @@ else:
                 dataset_files.append(os.path.join(root, f))
 check_dataset_arch_matches_opt(dataset_files, os.path.join(args.opt_tools_path, 'opt'))
 
-syner = PassSyner(args.dataset, args.opt_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode)
+syner = PassSyner(args.dataset, args.opt_tools_path, passlist=passlist, num_works=args.num_workers, count_mode=args.count_mode, search_scope=args.search_scope)
 results = syner.FindSynerPasses()
 
 # 枚举所有文件找到的协同对并去重, 写入 Step1 CSV (命名含数据集名)
