@@ -37,14 +37,15 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   │   └── riscv/       #   RISC-V架构: 交叉clang从C++源码生成, 内嵌riscv64 target triple+datalayout
 │   └── c_files/         # C源码: CSiBE v2.1.1基准测试套件(供--input_type c使用)
 ├── output/              # 各阶段输出结果
-│   ├── csibe_cache/                              # run_csibe_build.py: 下载的官方源码包与解压后的数据集(不进 git)
+│   ├── csibe_cache/                              # run_csibe.py: 下载的官方源码包与解压后的数据集(不进 git)
 │   ├── Step1_<项目名>_<架构>_EnumeratedPairs.csv # 训练阶段: 枚举的所有协同对(项目名=目录名或单文件名, 架构取自数据集 .ll 的 target triple)
 │   ├── Step2_<项目名>_<架构>_PassList.csv         # 优化阶段(project模式): 找到的最优 pass 序列, 每行一个 pass
 │   ├── Step2_<项目名>_<架构>_Result.json          # 优化阶段(project模式): 基线/优化后大小与整体缩减率
 │   ├── <项目名>_<架构>/                           # 实际编译对比阶段: 按最优序列实际编译出的 .o 文件
 │   ├── Step3_<项目名>_<架构>_data.txt             # 实际编译对比阶段: 单项目跑完后留存的本阶段关键数据
-│   ├── CSiBE_build_summary.txt                    # run_csibe_build.py 批量运行后各项目实际编译对比阶段输出的汇总
-│   └── CSiBE_build_data.tsv                       # run_csibe_build.py 批量运行后自动生成的数据表格
+│   ├── CSiBE_build_summary.txt                    # run_csibe.py 批量运行后各项目实际编译对比阶段输出的汇总
+│   └── CSiBE_build_data.tsv                       # run_csibe.py 批量运行后自动生成的数据表格
+├── pair_library/       # 协同对库: 保存训练得到的 Step1 协同对供 --reuse_pairs 复用 (当前含 CSiBE 各项目三架构的协同对)
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -56,7 +57,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── train.py         # 训练脚本：发现协同Pass对（含pass列表自动生成）
 │   ├── run.py           # 运行脚本：基于协同对使用GA优化代码
 │   ├── real_compile.py  # 实际编译对比脚本：用GA找到的最优序列实际编译源码输出缩减率
-│   ├── run_csibe_build.py # 批量运行脚本：为CSiBE各项目构造三架构命令批量运行并汇总(编译参数由ruyituner自动解析Makefile.in)
+│   ├── run_csibe.py       # 批量运行脚本：为CSiBE各项目构造三架构命令批量运行并汇总(编译参数由ruyituner自动解析Makefile.in)
 │   └── utils/           # 工具模块
 │       ├── GA.py        # 遗传算法实现
 │       ├── PassSyner.py # Pass协同效应分析
@@ -94,6 +95,19 @@ python3 ruyituner.py \
     --only_run \
     --paircsv ./output/Step1_x86_EnumeratedPairs.csv
 
+# 复用已有协同对直接进行GA优化（跳过训练）：第一次不带--reuse_pairs运行训练后，
+# output/下会生成Step1_<项目名>_<架构>_EnumeratedPairs.csv协同对文件；该文件可留在
+# output/不动，也可保存（复制/移动）到pair_library/（协同对库目录）长期留存，供后续
+# 多次复用；第二次运行加--reuse_pairs即跳过训练直接进行GA优化，复用文件由优化工具链
+# 架构与项目名自动匹配（依次在pair_library/与output/中查找）；
+# 应使用生成该协同对时的同一优化工具链
+python3 ruyituner.py \
+    --dataset ./datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2 \
+    --input_type c \
+    --baseline_tools_path /llvm_dir/build/bin \
+    --search_scope project \
+    --reuse_pairs
+
 # 输入为C源码：先用clang生成.ll到临时缓存目录，训练+优化结束后自动清理；用 .o 文件的text部分大小作为评分口径（要求工具链同时包含opt与llc）;旧式C代码（K&R/C89，如CSiBE的compiler基准）需用--c_std指定C标准，否则隐式函数声明导致编译失败；依赖自定义编译宏的基准（如flex需-DHAVE_CONFIG_H，否则flexdef.h不包含标准头）可用--c_flags追加参数。
 python3 ruyituner.py \
     --dataset ./datasets/c_files/CSiBE-v2.1.1/flex-2.5.31 \
@@ -122,10 +136,12 @@ python3 ruyituner.py \
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv`
+- `--reuse_pairs`: (可选) 布尔开关（默认false），传入即复用已有协同对跳过训练、直接进行GA优化；首次运行（不带本开关）训练得到的 Step1 协同对文件可留在 `output/` 不动，也可保存到 `pair_library/` 协同对库长期留存，第二次运行加本开关即可复用；复用文件由优化工具链架构与项目名自动匹配——候选架构依次取优化工具链opt的默认目标架构与数据集.ll内嵌triple的架构，按`Step1_<项目名>_<架构>_EnumeratedPairs.csv`命名在`--pair_library`目录与`output/`中依次查找；与`--paircsv`不能同时使用；复用前会检查协同对中的pass是否都存在于当前优化工具链opt的注册表、文件名架构后缀与数据集架构是否一致、以及伴随元数据(.meta.json)中的opt版本，不一致时输出警告（全部pass均不存在时报错退出）；`--input_type c`时C→IR编译仍会执行（GA评分需要.ll与基线清单）
+- `--pair_library`: (可选) 协同对库存放目录，默认`<项目根目录>/pair_library`（仅`--reuse_pairs`时使用）
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--ir-opt-level`: (可选) C→IR转换时clang的优化等级O0/O1/O2/O3/Os/Oz，缺省与`--opt-level`一致；仅`--input_type c`时生效（GA基线评分与实际编译对比仍使用`--opt-level`）
-- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto（透传给train.py与run.py）；`--input_type c` 搭配 `obj-size` 时，评分基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计（`clang -O<level> -c`，不再经过 C→IR→opt 中间过程），其余组合基线仍按 IR 统计
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认obj-size（按.o的.text字节数统计，与实际编译对比阶段口径一致；ruyituner.py/train.py/run.py 默认均为此值）；`--input_type c` 搭配 `obj-size` 时，评分基线直接用 clang 以 `--opt-level` 优化等级把源文件编译为 .o 统计（`clang -O<level> -c`，不再经过 C→IR→opt 中间过程），其余组合基线仍按 IR 统计
 - `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file（为每个文件各找一个，走现有流程）；project=为整个项目找一条公共序列（聚合适应度GA，按文件大小加权的整体缩减率评分）
 - `--max-path-length`: (可选) GA初始种群中pass序列的最大长度（pass个数），默认2；仅约束初始种群的序列长度，交叉与变异产生的后代不受该上限约束
 - `--passlist_output`/`--no_parse_check`/`--keep_instrumentation`/`--extra_exclude`: (可选) 透传给train.py的pass列表生成参数
@@ -179,7 +195,7 @@ python3 train.py \
 - `--keep_instrumentation`: (可选) 保留插桩类pass（asan/tsan/pgo-*等，默认剔除）
 - `--extra_exclude`: (可选) 额外的pass排除规则（正则表达式）
 - `--num_workers`: (可选) 并行工作线程数，默认16
-- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认obj-size
 - `--search_scope`: (可选) 协同对查找范围 file/project，默认 file；project 时把在任一文件上单独运行即失败的 pass 全局剔除、最终协同对列表不再含有这些 pass（由 ruyituner.py 透传，与优化阶段的 `--search_scope` 保持一致）
 
 **输出文件：**
@@ -217,7 +233,7 @@ python3 run.py \
 - `--opt_tools_path`: (可选) 优化工具链路径，候选序列的 opt/llc 评分使用，缺省与 `--baseline_tools_path` 相同
 - `--paircsv`: 训练阶段生成的协同Pass对CSV文件
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz
-- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认auto
+- `--count_mode`: (可选) 指令计数方式开关 auto/opt-stats/text/obj-size，默认obj-size
 - `--search_scope`: (可选) 最优pass序列的搜索范围 file/project，默认file；project=为整个项目找一条公共序列，输出公共序列与整体缩减率，不再逐文件输出
 
 **输出：** 两种 `--search_scope` 模式的输出不同：
@@ -267,7 +283,7 @@ Done: one common pass sequence for 6 files.
 
 实际编译对比阶段在 GA 优化之后执行：用搜索到的最优 pass 序列真正编译源码，得到真实编译口径下的代码体积缩减率，验证序列在真实编译中的收益。该阶段由 ruyituner.py 自动调用（已拆分为独立脚本 scripts/real_compile.py，与 train.py/run.py 一致，以子进程方式执行），目前仅 C 输入且项目模式下运行：
 
-- **触发条件**：经 ruyituner.py 入口运行，且 `--input_type c` 与 `--search_scope project` 同时满足；`--input_type ll` 或 file 模式不执行本阶段；
+- **触发条件**：经 ruyituner.py 入口运行，且 `--input_type c` 与 `--search_scope project` 同时满足；`--input_type ll` 或 file 模式不执行本阶段；本阶段基线比较按 .o 字节数口径，需搭配 `--count_mode obj-size`（其它计数口径下 GA 基线是指令数，与字节数不可直接比较，缩减率无意义，本阶段会打印警告）；
 - **输入来源**：最优 pass 序列直接读优化阶段写出的 `output/Step2_<项目名>_<架构>_PassList.csv`；基线大小复用前一步写出的 `output/Step2_<项目名>_<架构>_Result.json`（不重新计算）；工具链、`--c_std`、`--c_flags`、`--opt-level`、`--ir-opt-level`、并行数等参数直接取自 ruyituner.py，源文件列表取 C→IR 阶段的基线清单；
 - **编译管线**：与评分口径一致——前端 IR 复用 C→IR 阶段生成到缓存目录的 .ll（不重复跑 clang 前端），管线为 `opt -passes=<序列> → llc pic`；个别文件 opt/llc 失败时回退 `clang -<ir-opt-level 等级> -c` 直通编译（等级与 C→IR 转换的 `--ir-opt-level` 一致，缺省与 `--opt-level` 相同；在数据集根目录下执行）。编译出的 .o 输出到 `output/<项目名>_<架构>/` 目录；
 - **输出**：clang -<优化等级> 基线大小（来自前一步 GA 输出）、按优化序列实际编译后总大小（全部文件 .o 的 .text 大小合计，标签注明 .ll 由 clang 以 --ir-opt-level 等级生成）与实际代码体积缩减率（与基线对比），并提示序列编译失败回退直通编译的文件数；以上关键数据同时留存到 `output/Step3_<项目名>_<架构>_data.txt`，便于单项目跑完后回看。
@@ -297,7 +313,7 @@ python3 ruyituner.py \
 
 ### 5. 指令计数方式（--count_mode）
 
-train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，默认 `auto`），控制训练与优化阶段用哪种口径统计代码大小：
+train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，默认 `obj-size`），控制训练与优化阶段用哪种口径统计代码大小：
 
 - `auto`（默认）：优先使用 `opt -passes=instcount -stats`（需 LLVM_FORCE_ENABLE_STATS=ON 构建），不可用时自动回退为 IR 文本指令行统计；
 - `opt-stats`：强制使用 `opt -passes=instcount -stats`，opt 不存在、不支持 -stats 或统计失败时直接报错退出；
@@ -313,9 +329,9 @@ RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节
 - **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
 - **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。优化工具链需包含 clang，先用 clang 以 `--ir-opt-level` 指定的优化等级（缺省与 `--opt-level` 一致，默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--ir-opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用基线工具链的 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源采用 `--opt-level` 优化等级（C→IR 生成等级由 `--ir-opt-level` 控制，缺省与之相同）。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
-CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe_build.py来自动运行CSiBE。
+CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
-### 7. CSiBE 构建配置批量运行脚本（scripts/run_csibe_build.py）
+### 7. CSiBE 构建配置批量运行脚本（scripts/run_csibe.py）
 
 运行 CSiBE v2.1.1 的批量脚本：不依赖 RunCSiBE.md 里写死的命令，各项目的编译参数（`-D`/`-U`/`-I` 与 C 标准）由 ruyituner.py 自动解析项目源码目录下自带的 Makefile.in 获得（`--input_type c` 且数据集目录含 Makefile.in 时自动生效，未显式提供 `--c_std` 时自动默认 gnu89，详见第 1 节 `--c_std`/`--c_flags` 参数说明），本脚本只为各架构命令追加架构差异参数，再为 x86 / RISC-V / AArch64 三套工具链分别构造 ruyituner 命令（均带 `--search_scope project`）批量运行，为每个项目找出最优 pass 序列。本脚本自成一体，只以子进程方式调用 ruyituner.py，汇总与 TSV 数据表格逻辑自行实现，默认文件名分别为 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`。
 
@@ -349,13 +365,13 @@ python3 ruyituner.py \
 
 ```bash
 # 下载源码包并解压后, 用三套工具链批量运行全部项目（编译参数由 ruyituner 自动解析 Makefile.in）
-python3 scripts/run_csibe_build.py \
+python3 scripts/run_csibe.py \
     --x86_path /llvm_dir/build-x86/bin \
     --riscv_path /llvm_dir/build-riscv/bin \
     --aarch64_path /llvm_dir/build-aarch64/bin
 
 # 跳过下载, 直接用仓库跟踪的数据集跑 x86
-python3 scripts/run_csibe_build.py \
+python3 scripts/run_csibe.py \
     --x86_path /llvm_dir/build-x86/bin \
     --only_arch x86 \
     --no_download --dataset_dir datasets/c_files/CSiBE-v2.1.1
@@ -370,6 +386,7 @@ python3 scripts/run_csibe_build.py \
 - `--tar_path`/`--force`/`--no_download`: (可选) 源码包缓存路径/已存在仍强制重下/跳过下载与解压
 - `--riscv_sysroot`/`--riscv_sysroot_projects`: (可选) riscv 需要 glibc 头文件的项目追加的 `--sysroot` 路径（默认 `/opt/riscv/sysroot`，置空关闭）及应用该参数的项目列表（逗号分隔，默认 `libmspack`）
 - `--opt-level`/`--ir-opt-level`: (可选) 追加到每条 ruyituner 命令的基线优化等级/C→IR 转换优化等级（缺省不追加）
+- `--reuse_pairs`: (可选) 每条 ruyituner 命令追加 `--reuse_pairs`，复用 `pair_library/` 或 `output/` 中已有的 Step1 协同对跳过训练、直接进行 GA 优化（适合已生成过协同对的后续批量运行）
 - `--output`/`--data_output`: (可选) 汇总输出文件/数据表格输出文件（TSV），默认 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`
 - `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
@@ -379,6 +396,7 @@ python3 scripts/run_csibe_build.py \
 - `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（以 `--opt-level O0` 生成时加 `-Xclang -disable-O0-optnone`，其余优化等级前端不会产生该属性）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
 - 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
+- 复用旧协同对（`--reuse_pairs`）时务必使用生成该协同对时的同一优化工具链：不同LLVM版本/构建的opt注册的pass不同，旧协同对中的pass在新opt中可能不存在或行为变化，导致GA结果劣化；工具会打印警告但不会阻止运行（全部pass都不存在时除外）。
 
 ## 参考文献
 

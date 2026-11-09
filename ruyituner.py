@@ -35,6 +35,11 @@ CSiBE 等自带 Makefile.in 的 C 项目无需手工维护编译参数: ruyitune
   python3 ruyituner.py --dataset datasets/ll_files/x86 --input_type ll --baseline_tools_path ../llvm_dir/build/bin --only_run \
       --paircsv output/Step1_x86_EnumeratedPairs.csv
 
+  # 复用已有协同对直接进行 GA 优化 (跳过训练): 按优化工具链架构与项目名自动到
+  # pair_library/ (或 output/) 匹配 Step1 文件; 应使用生成该协同对时的同一优化工具链
+  python3 ruyituner.py --dataset datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2 --input_type c \
+      --baseline_tools_path ../llvm_dir/build/bin --search_scope project --reuse_pairs
+
   # 输入 C 源码数据集 (.c 或预处理后的 .i, 先用clang以--ir-opt-level优化等级生成.ll到缓存目录,
   # 缺省与基线优化等级--opt-level一致; 流程结束自动清理)
   python3 ruyituner.py --dataset datasets/c_files --input_type c --baseline_tools_path ../llvm_dir/build/bin
@@ -75,14 +80,17 @@ TRAIN_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'train.py')
 RUN_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'run.py')
 REAL_COMPILE_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'real_compile.py')
 DEFAULT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
+DEFAULT_PAIR_LIBRARY = os.path.join(PROJECT_ROOT, 'pair_library')
 
 # scripts/ 目录加入模块搜索路径, 复用公共函数 (dataset_output_name 等)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
-from utils.common import find_clang, dataset_output_name, dataset_arch_name  # type: ignore  # 依赖上面的 sys.path 运行时解析
+from utils.common import (find_clang, dataset_output_name, dataset_arch_name,  # type: ignore  # 依赖上面的 sys.path 运行时解析
+                          read_paircsv_pairs, paircsv_pass_names,
+                          get_opt_pass_names, get_opt_version, opt_default_arch_name)
 
 
 # ---- CSiBE 等项目的编译参数自动解析 (Makefile.in) ----
-# 移植自 scripts/run_csibe_build.py: 解析项目自带的 Makefile.in 中的 CFLAGS,
+# 移植自 scripts/run_csibe.py: 解析项目自带的 Makefile.in 中的 CFLAGS,
 # 提取 -D/-U/-I 参数供 clang 使用, 免去 C 输入时手工维护 --c_std/--c_flags
 
 # Makefile 变量定义与 $(VAR) 引用
@@ -383,6 +391,84 @@ def build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name)
     return cmd
 
 
+def find_reuse_paircsv(project_base, dataset_arch, opt_tools_path, pair_library, out_dir):
+    '''按优化工具链架构与项目名自动匹配 Step1 协同对文件.
+
+    候选架构依次为: 优化工具链 opt 的默认目标架构 (归一为 x86/riscv/aarch64)、
+    数据集 .ll 内嵌 triple 的架构 (aarch64 等默认目标为空的工具链靠后者兑底);
+    项目名本身已含候选架构名时不重复追加. 依次在 pair_library/ 与 output/ 两个
+    目录中按 Step1_<项目名>_<架构>_EnumeratedPairs.csv 命名查找, 返回第一个存在
+    的文件; 都找不到时报错退出并列出尝试过的路径.'''
+    archs = []
+    tool_arch = opt_default_arch_name(os.path.join(opt_tools_path, 'opt'))
+    if tool_arch:
+        archs.append(tool_arch)
+    if dataset_arch:
+        archs.append(dataset_arch)
+    names = []
+    for a in dict.fromkeys(archs):  # 去重保序
+        if a.lower() in project_base.lower():
+            name = f'Step1_{project_base}_EnumeratedPairs.csv'
+        else:
+            name = f'Step1_{project_base}_{a}_EnumeratedPairs.csv'
+        if name not in names:
+            names.append(name)
+    if not names:
+        names.append(f'Step1_{project_base}_EnumeratedPairs.csv')
+    tried = []
+    for directory in (pair_library, out_dir):
+        for name in names:
+            path = os.path.join(directory, name)
+            tried.append(path)
+            if os.path.isfile(path):
+                return path
+    raise SystemExit('--reuse_pairs 自动匹配协同对失败, 尝试过的路径均不存在:\n  ' + '\n  '.join(tried))
+
+
+def check_reused_paircsv(paircsv, opt_tools_path, dataset_arch=None):
+    '''复用协同对前的一致性检查 (只提示, 除完全无法匹配外不阻止运行).
+
+    核对协同对中的 pass 是否都存在于当前优化工具链 opt 的注册表 (不存在的
+    pass 在 GA 评分时会按 opt 失败处理); 协同对文件名中的架构后缀与当前数据
+    集架构不一致时提示; 新训练生成的 Step1 附带 .meta.json 元数据, 其中记录
+    的 opt 版本与当前优化工具链不一致时提示.'''
+    pairs = read_paircsv_pairs(paircsv)
+    if not pairs:
+        raise SystemExit(f'{paircsv}: 协同对列表为空, 无法进行 GA 优化.')
+    # 带参数的写法 (如 invalidate<all>) 与注册表比对时都取基名
+    names = {n.split('<', 1)[0] for n in paircsv_pass_names(pairs)}
+    opt_path = os.path.join(opt_tools_path, 'opt')
+    registered = get_opt_pass_names(opt_path)
+    unknown = sorted(n for n in names if n not in registered)
+    print(f'[ruyituner] 协同对复用检查: {len(pairs)} 个协同对, 涉及 {len(names)} 个 pass; '
+          f'当前优化工具链 opt 版本: {get_opt_version(opt_path) or "未知"}')
+    if unknown and len(unknown) == len(names):
+        raise SystemExit(
+            f'{paircsv} 中的所有 pass 均不存在于当前优化工具链的 opt (--opt_tools_path), '
+            f'协同对与工具链不匹配, 终止. 请使用生成该协同对时的优化工具链, 或重新训练.')
+    if unknown:
+        shown = ', '.join(unknown[:8]) + ('...' if len(unknown) > 8 else '')
+        print(f'[ruyituner] 警告: {len(unknown)} 个 pass 在当前 opt 中不存在 (协同对可能来自其他 LLVM 版本), '
+              f'相关序列在 GA 评分时会按 opt 失败处理: {shown}')
+    m = re.search(r'_(x86|riscv|aarch64)_EnumeratedPairs\.csv$', os.path.basename(paircsv))
+    csv_arch = m.group(1) if m else None
+    if dataset_arch and csv_arch and dataset_arch.lower() != csv_arch.lower():
+        print(f'[ruyituner] 警告: 协同对文件架构后缀为 {csv_arch}, 当前数据集架构为 {dataset_arch}, 不一致时搜索结果可能劣化.')
+    meta_path = os.path.splitext(paircsv)[0] + '.meta.json'
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, encoding='utf-8') as mf:
+                meta = json.load(mf)
+        except (OSError, ValueError):
+            meta = {}
+        meta_ver = meta.get('opt_version')
+        cur_ver = get_opt_version(opt_path)
+        if meta_ver and cur_ver and meta_ver != cur_ver:
+            print(f'[ruyituner] 警告: 协同对生成时的 opt 版本为 {meta_ver}, 当前优化工具链为 {cur_ver}, 不一致可能导致结果劣化.')
+    else:
+        print('[ruyituner] 提示: 该协同对没有伴随元数据 (.meta.json), 无法校验生成时的工具链版本, 请确认与本次优化工具链一致.')
+
+
 def main():
     # print 接入管道时默认块缓冲, 会让自身横幅/阶段标题排在子脚本
     # (train.py/run.py/real_compile.py) 输出之后, 重定向日志时顺序错乱;
@@ -419,9 +505,9 @@ def main():
     parser.add_argument('--ir-opt-level', type=str, default=None,
                         choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
                         help='C→IR 转换时 clang 的优化等级, 缺省与 --opt-level 一致 (可选, 仅 --input_type c 生效)')
-    parser.add_argument('--count_mode', type=str, default='auto',
+    parser.add_argument('--count_mode', type=str, default='obj-size',
                         choices=['auto', 'opt-stats', 'text', 'obj-size'],
-                        help='指令计数方式开关 (传给 train.py 与 run.py): auto(默认) | opt-stats | text | obj-size')
+                        help='指令计数方式开关 (传给 train.py 与 run.py): auto | opt-stats | text | obj-size, 默认 obj-size (按 .o 的 .text 字节数统计, 与实际编译对比阶段口径一致)')
     parser.add_argument('--search_scope', type=str, default='file',
                         choices=['file', 'project'],
                         help='最优 pass 序列的搜索范围: file=为每个文件各找一个 (默认), project=为整个项目找一条公共序列 (聚合适应度 GA)')
@@ -441,6 +527,10 @@ def main():
                         help='仅执行优化阶段, 不进行训练 (需要已有协同对 CSV)')
     parser.add_argument('--paircsv', type=str, default=None,
                         help='优化阶段使用的协同对 CSV, 默认 <output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv')
+    parser.add_argument('--reuse_pairs', action='store_true',
+                        help='复用已有协同对跳过训练、直接进行 GA 优化: 复用文件由优化工具链架构与项目名自动匹配 (依次在 --pair_library 与 output/ 中查找 Step1_<项目名>_<架构>_EnumeratedPairs.csv); 复用前会检查 pass 注册表/架构/工具链版本一致性')
+    parser.add_argument('--pair_library', type=str, default=None,
+                        help='协同对库存放目录, 默认 <项目根目录>/pair_library (仅 --reuse_pairs 时使用)')
     # --c_flags 的值常以 - 开头 (如 -DHAVE_CONFIG_H), argparse 会误当成选项报
     # "expected one argument"; 解析前把 "--c_flags <值>" 合并为 "--c_flags=<值>"
     argv = list(sys.argv[1:])
@@ -475,6 +565,15 @@ def main():
     if args.opt_tools_path != args.baseline_tools_path:
         print(f'[ruyituner] 工具链: 基线 {args.baseline_tools_path} / 优化 {args.opt_tools_path}')
     print('=' * 60)
+
+    # --reuse_pairs: 复用已有协同对 CSV, 跳过训练直接进行 GA 优化; 复用文件
+    # 由优化工具链架构与项目名自动匹配 (见 find_reuse_paircsv), 不支持手工指定
+    if args.reuse_pairs:
+        if args.only_train:
+            parser.error('--reuse_pairs (跳过训练) 与 --only_train 不能同时使用')
+        if args.paircsv:
+            parser.error('--reuse_pairs 与 --paircsv 不能同时使用 (复用文件由工具链架构与项目名自动匹配)')
+        args.only_run = True
 
     # C 输入 + 项目模式时, GA 优化之后还有实际编译对比阶段
     do_real_compile = (args.input_type == 'c' and args.search_scope == 'project'
@@ -532,9 +631,13 @@ def main():
     print(f'[ruyituner] 项目输出名: {project_name}' +
           (f' (架构: {arch})' if arch else ''))
 
-    try:
-        out_dir = args.output_dir or DEFAULT_OUTPUT_DIR
+    out_dir = args.output_dir or DEFAULT_OUTPUT_DIR
+    if args.reuse_pairs:
+        args.paircsv = find_reuse_paircsv(project_base, arch, args.opt_tools_path,
+                                          args.pair_library or DEFAULT_PAIR_LIBRARY, out_dir)
+        print(f'[ruyituner] 复用协同对: {args.paircsv} (跳过训练, 直接进行 GA 优化)')
 
+    try:
         if not args.only_run:
             os.makedirs(out_dir, exist_ok=True)
             print('=' * 60)
@@ -550,6 +653,8 @@ def main():
             if not os.path.isfile(paircsv):
                 print(f'[ruyituner] 找不到协同对文件: {paircsv}, 请先完成训练.')
                 sys.exit(1)
+            if args.reuse_pairs:
+                check_reused_paircsv(paircsv, args.opt_tools_path, arch)
             run_cmd = [sys.executable, RUN_SCRIPT,
                        '--dataset', dataset,
                        # 基线计算用基线工具链, 序列评分 (opt/llc) 用优化工具链

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 从 CSiBE v2.1.1 自身的项目构建文件读取编译配置, 生成 ruyituner 命令并批量运行
-(scripts/run_csibe_build.py).
+(scripts/run_csibe.py).
 
 本脚本是运行 CSiBE v2.1.1 的一条新路径, 不再依赖 RunCSiBE.md 里写死的命令:
 各项目的编译参数 (-D/-U/-I 与 C 标准) 由 ruyituner.py 自动解析项目源码目录下
@@ -18,7 +18,7 @@ pass 序列, 汇总基线大小/实际编译后总大小/缩减率并生成 TSV 
 --riscv_sysroot_projects 调整应用的项目列表), 其余项目与 x86 相同.
 
 用法示例:
-  python3 scripts/run_csibe_build.py \
+  python3 scripts/run_csibe.py \
       --x86_path /llvm_dir/build-x86/bin \
       --riscv_path /llvm_dir/build-riscv/bin \
       --aarch64_path /llvm_dir/build-aarch64/bin
@@ -33,6 +33,9 @@ pass 序列, 汇总基线大小/实际编译后总大小/缩减率并生成 TSV 
   优化工具链与基线分开: 追加 --opt_x86_path/--opt_riscv_path/--opt_aarch64_path
                      (对应架构命令追加 --opt_tools_path, 缺省不追加, 由 ruyituner
                      用基线工具链)
+  复用已有协同对:     追加 --reuse_pairs (每条 ruyituner 命令自动追加该开关,
+                     复用 pair_library/ 或 output/ 中已有的 Step1 协同对跳过训练、
+                     直接进行 GA 优化, 需先跑过一次生成协同对)
 
 本脚本自成一体: 源码包下载/解压、任务运行/汇总与 TSV 数据表格的逻辑都在本文件内
 实现, 只以子进程方式调用 ruyituner.py.
@@ -103,12 +106,12 @@ SKIP_DIRS = {'testdata', 'linux-2.4.23-pre3-testplatform'}
 def download_tarball(tar_path, force):
     """下载官方源码包到 tar_path; 已存在且非空时跳过 (force 强制重新下载)."""
     if os.path.isfile(tar_path) and os.path.getsize(tar_path) > 0 and not force:
-        print(f'[run_csibe_build] {tar_path} 已存在, 跳过下载 (--force 可强制重新下载).')
+        print(f'[run_csibe] {tar_path} 已存在, 跳过下载 (--force 可强制重新下载).')
         return
     out_dir = os.path.dirname(tar_path)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-    print(f'[run_csibe_build] 下载 {TARBALL_URL}')
+    print(f'[run_csibe] 下载 {TARBALL_URL}')
     part_path = tar_path + '.part'
     req = urllib.request.Request(TARBALL_URL, headers={'User-Agent': 'ruyi-tuner'})
     try:
@@ -123,35 +126,35 @@ def download_tarball(tar_path, force):
                     fh.write(chunk)
                     done += len(chunk)
                     if total:
-                        print(f'[run_csibe_build]   已下载 {done} / {total} 字节'
+                        print(f'[run_csibe]   已下载 {done} / {total} 字节'
                               f' ({done * 100 // total}%)', end='\r', flush=True)
         if total:
             print()
     except (urllib.error.URLError, OSError) as exc:
-        print(f'[run_csibe_build] 下载失败: {exc}')
+        print(f'[run_csibe] 下载失败: {exc}')
         if os.path.isfile(part_path):
             os.remove(part_path)
         sys.exit(1)
     os.replace(part_path, tar_path)
-    print(f'[run_csibe_build] 下载完成: {tar_path} ({os.path.getsize(tar_path)} 字节)')
+    print(f'[run_csibe] 下载完成: {tar_path} ({os.path.getsize(tar_path)} 字节)')
 
 
 def extract_dataset(tar_path, dataset_dir):
     """把源码包中的 CSiBE/src 内容解压到 dataset_dir.
 
     dataset_dir 已有内容时先清空再写入, 保证与源码包完全一致 (跳过 SKIP_DIRS)."""
-    print(f'[run_csibe_build] 解压 {tar_path} 到 {dataset_dir}')
+    print(f'[run_csibe] 解压 {tar_path} 到 {dataset_dir}')
     tmp_dir = tempfile.mkdtemp(prefix='csibe-v2.1.1-extract-')
     try:
         try:
             with tarfile.open(tar_path, 'r:gz') as tf:
                 tf.extractall(tmp_dir)
         except (tarfile.TarError, OSError) as exc:
-            print(f'[run_csibe_build] 解压失败: {exc}')
+            print(f'[run_csibe] 解压失败: {exc}')
             sys.exit(1)
         src_dir = os.path.join(tmp_dir, 'CSiBE', 'src')
         if not os.path.isdir(src_dir):
-            print(f'[run_csibe_build] 源码包内容异常: 未找到 CSiBE/src 目录, 终止.')
+            print(f'[run_csibe] 源码包内容异常: 未找到 CSiBE/src 目录, 终止.')
             sys.exit(1)
         if os.path.isdir(dataset_dir):
             shutil.rmtree(dataset_dir)
@@ -159,7 +162,7 @@ def extract_dataset(tar_path, dataset_dir):
         copied = skipped = 0
         for name in sorted(os.listdir(src_dir)):
             if name in SKIP_DIRS:
-                print(f'[run_csibe_build]   跳过 (不参与运行): {name}')
+                print(f'[run_csibe]   跳过 (不参与运行): {name}')
                 skipped += 1
                 continue
             src = os.path.join(src_dir, name)
@@ -169,7 +172,7 @@ def extract_dataset(tar_path, dataset_dir):
             else:
                 shutil.copy2(src, dst)
             copied += 1
-        print(f'[run_csibe_build] 解压完成: {copied} 个条目, 跳过 {skipped} 个目录.')
+        print(f'[run_csibe] 解压完成: {copied} 个条目, 跳过 {skipped} 个目录.')
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -204,19 +207,21 @@ def extract_stage3(lines):
     return '\n'.join(lines[start:end]).rstrip()
 
 
-def build_command(project, arch, paths, dataset_root,
-                  riscv_sysroot, sysroot_projects, extra_args, opt_paths=None):
+def build_command(project, arch, paths, dataset_root, riscv_sysroot,
+                  sysroot_projects, extra_args, opt_paths=None,
+                  reuse_pairs=False):
     """为一个项目拼出一条 ruyituner 命令 (--search_scope project 模式).
 
     各项目的编译参数 (-D/-U/-I 与 C 标准) 由 ruyituner.py 自动解析项目自带
     Makefile.in 获得, 这里只追加架构差异参数 (aarch64 --target 与
     riscv --sysroot);
     opt_paths: {架构: 优化工具链路径}; 指定架构时在命令末尾追加
-    --opt_tools_path (基线工具链与优化工具链分开), 未提供时则不追加."""
+    --opt_tools_path (基线工具链与优化工具链分开), 未提供时则不追加;
+    reuse_pairs: True 时命令追加 --reuse_pairs (复用已有 Step1 协同对
+    跳过训练, 直接进行 GA 优化)."""
     argv = [sys.executable, '-u', RUYITUNER_PY,
             '--dataset', os.path.join(dataset_root, project),
             '--baseline_tools_path', paths[arch],
-            '--count_mode', 'obj-size',
             '--input_type', 'c',
             '--search_scope', 'project']
     c_flags = []
@@ -233,13 +238,15 @@ def build_command(project, arch, paths, dataset_root,
     if opt_paths and opt_paths.get(arch):
         if not _has_flag(argv, '--opt_tools_path'):
             argv += ['--opt_tools_path', opt_paths[arch]]
+    if reuse_pairs and not _has_flag(argv, '--reuse_pairs'):
+        argv.append('--reuse_pairs')
     return argv
 
 
 def run_task(project, arch, argv, out_fh):
     """运行一条命令, 实时回显输出, 并把实际编译对比阶段内容写入汇总文件."""
-    print(f'[run_csibe_build] ============ {project} ({arch}) ============')
-    print('[run_csibe_build] 命令:', ' '.join(shlex.quote(a) for a in argv))
+    print(f'[run_csibe] ============ {project} ({arch}) ============')
+    print('[run_csibe] 命令:', ' '.join(shlex.quote(a) for a in argv))
     proc = subprocess.Popen(argv, cwd=PROJECT_ROOT, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
     lines = []
@@ -252,8 +259,8 @@ def run_task(project, arch, argv, out_fh):
     stage3 = extract_stage3(lines)
     if stage3 is None:
         tail = '\n'.join(lines[-8:]) if lines else '(无输出)'
-        stage3 = (f'[run_csibe_build] 未输出实际编译对比阶段 (exit={rc}), 输出末尾:\n{tail}')
-        print(f'[run_csibe_build] 警告: 未输出实际编译对比阶段 (exit={rc}), 详情见汇总文件')
+        stage3 = (f'[run_csibe] 未输出实际编译对比阶段 (exit={rc}), 输出末尾:\n{tail}')
+        print(f'[run_csibe] 警告: 未输出实际编译对比阶段 (exit={rc}), 详情见汇总文件')
 
     out_fh.write(f'{project}：{arch}：\n')
     out_fh.write(stage3 + '\n\n')
@@ -431,6 +438,11 @@ def main():
     parser.add_argument('--ir-opt-level', type=str, default=None,
                         choices=['O0', 'O1', 'O2', 'O3', 'Os', 'Oz'],
                         help='追加到每条 ruyituner 命令的 C→IR 转换优化等级 (缺省不追加)')
+    parser.add_argument('--reuse_pairs', action='store_true',
+                        help='每条 ruyituner 命令追加 --reuse_pairs: 复用已有 '
+                             'Step1 协同对跳过训练、直接进行 GA 优化 (复用文件由 '
+                             'ruyituner 按优化工具链架构与项目名在 pair_library/ '
+                             '与 output/ 中自动匹配)')
     parser.add_argument('--dry_run', action='store_true',
                         help='只解析并打印将执行的命令, 不实际运行')
     parser.add_argument('--output', type=str, default=DEFAULT_OUTPUT,
@@ -446,9 +458,9 @@ def main():
         extract_dataset(args.tar_path, args.dataset_dir)
     else:
         if not os.path.isdir(args.dataset_dir):
-            print(f'[run_csibe_build] 数据集目录不存在: {args.dataset_dir}, 终止.')
+            print(f'[run_csibe] 数据集目录不存在: {args.dataset_dir}, 终止.')
             sys.exit(1)
-        print(f'[run_csibe_build] --no_download: 跳过下载与解压, 直接使用 {args.dataset_dir}')
+        print(f'[run_csibe] --no_download: 跳过下载与解压, 直接使用 {args.dataset_dir}')
     dataset_root = os.path.abspath(args.dataset_dir)
 
     archs = [args.only_arch] if args.only_arch else ['x86', 'riscv', 'aarch64']
@@ -460,9 +472,9 @@ def main():
         if not paths[arch]:
             parser.error(f'缺少 {arch} 工具链路径 (--{arch}_path)')
         if not os.path.isdir(paths[arch]):
-            print(f'[run_csibe_build] 警告: {arch} 工具链目录不存在: {paths[arch]}')
+            print(f'[run_csibe] 警告: {arch} 工具链目录不存在: {paths[arch]}')
         if opt_paths[arch] and not os.path.isdir(opt_paths[arch]):
-            print(f'[run_csibe_build] 警告: {arch} 优化工具链目录不存在: {opt_paths[arch]}')
+            print(f'[run_csibe] 警告: {arch} 优化工具链目录不存在: {opt_paths[arch]}')
 
     # 项目选择与检查
     projects = list(CSIBE_V211_PROJECTS)
@@ -470,14 +482,14 @@ def main():
         wanted = {p.strip() for p in args.projects.split(',') if p.strip()}
         unknown = sorted(p for p in wanted if p not in CSIBE_V211_PROJECTS)
         if unknown:
-            print(f'[run_csibe_build] 未知项目已忽略: {", ".join(unknown)}')
+            print(f'[run_csibe] 未知项目已忽略: {", ".join(unknown)}')
         projects = [p for p in projects if p in wanted]
     missing = [p for p in projects if not os.path.isdir(os.path.join(dataset_root, p))]
     projects = [p for p in projects if p not in missing]
     if missing:
-        print(f'[run_csibe_build] 数据集中缺少目录, 跳过: {", ".join(missing)}')
+        print(f'[run_csibe] 数据集中缺少目录, 跳过: {", ".join(missing)}')
     if not projects:
-        print('[run_csibe_build] 没有可运行的项目, 终止.')
+        print('[run_csibe] 没有可运行的项目, 终止.')
         sys.exit(1)
 
     extra_args = []
@@ -496,16 +508,16 @@ def main():
         for arch in archs:
             argv = build_command(project, arch, paths, dataset_root,
                                  args.riscv_sysroot, sysroot_projects, extra_args,
-                                 opt_paths)
+                                 opt_paths, args.reuse_pairs)
             tasks.append(Task(project, arch, argv))
 
-    print(f'[run_csibe_build] 共 {len(tasks)} 条命令 (项目数: {len(projects)})')
+    print(f'[run_csibe] 共 {len(tasks)} 条命令 (项目数: {len(projects)})')
     if args.dry_run:
         for task in tasks:
             print(f'  {task.project} ({task.arch}):',
                   ' '.join(shlex.quote(a) for a in task.cmd_line))
-        print(f'[run_csibe_build] 汇总将写入: {args.output}')
-        print(f'[run_csibe_build] 数据表格将写入: {args.data_output}')
+        print(f'[run_csibe] 汇总将写入: {args.output}')
+        print(f'[run_csibe] 数据表格将写入: {args.data_output}')
         sys.exit(0)
 
     out_dir = os.path.dirname(args.output)
@@ -524,16 +536,17 @@ def main():
                      f'{args.opt_aarch64_path or "同基线"})\n')
         out_fh.write(f'# riscv --sysroot: {args.riscv_sysroot or "(未使用)"} '
                      f'(项目: {", ".join(sorted(sysroot_projects)) or "无"})\n')
+        out_fh.write(f'# 协同对: {"复用 (--reuse_pairs)" if args.reuse_pairs else "本次训练生成"}\n')
         out_fh.write('\n')
         out_fh.flush()
         for task in tasks:
             run_task(task.project, task.arch, task.cmd_line, out_fh)
-    print(f'[run_csibe_build] 全部完成, 汇总已写入: {args.output}')
+    print(f'[run_csibe] 全部完成, 汇总已写入: {args.output}')
 
     # 从汇总文件中抽取数据生成 TSV 表格
     records = parse_summary(args.output)
     write_data_table(records, args.data_output, archs)
-    print(f'[run_csibe_build] 共 {len(records)} 个项目, 数据表格已写入: {args.data_output}')
+    print(f'[run_csibe] 共 {len(records)} 个项目, 数据表格已写入: {args.data_output}')
 
 
 if __name__ == '__main__':

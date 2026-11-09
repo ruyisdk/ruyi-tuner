@@ -18,6 +18,8 @@
 import sys
 import os
 import re
+import json
+import time
 import subprocess
 import argparse as ap
 import csv
@@ -305,8 +307,8 @@ args.add_argument("--passlist_output", type=str, default=None, help="output path
 args.add_argument("--no_parse_check", action='store_true', help="skip opt re-parse verification of pass output IR")
 args.add_argument("--keep_instrumentation", action='store_true', help="keep instrumentation passes (asan/tsan/pgo-* etc., excluded by default)")
 args.add_argument("--extra_exclude", type=str, default=None, help="extra exclude rules for the generated pass list (regex)")
-args.add_argument("--count_mode", type=str, default='auto', choices=['auto', 'opt-stats', 'text', 'obj-size'],
-                  help="instruction counting mode: auto (default) | opt-stats | text | obj-size")
+args.add_argument("--count_mode", type=str, default='obj-size', choices=['auto', 'opt-stats', 'text', 'obj-size'],
+                  help="instruction counting mode: auto | opt-stats | text | obj-size (default: obj-size, .text bytes of the compiled .o)")
 args.add_argument("--search_scope", type=str, default='file', choices=['file', 'project'],
                   help="pair finding scope: file (default, crashing passes excluded per file) or project (passes crashing on any file are globally excluded from the final pair list)")
 args.add_argument("--project_name", type=str, default=None, help="project name used to name the output CSV (default: derived from the dataset directory or file name)")
@@ -370,5 +372,22 @@ with open(output_path, mode='w', encoding='utf-8', newline='') as outfile:
                 syner_list.append(element)
                 seen_elements.add(element)
                 index_counter += 1
+
+# 协同对复用配套元数据: 记录本次生成时的工具链版本等, 供 --reuse_pairs 复用
+# 时校验协同对与当前优化工具链是否一致 (旧文件没有该元数据, 只能人工确认)
+meta_path = os.path.join(args.output_dir, f'Step1_{name}_EnumeratedPairs.meta.json')
+with open(meta_path, 'w', encoding='utf-8') as mf:
+    json.dump({
+        'project_name': name,
+        'pair_count': index_counter,
+        'opt_version': get_opt_version(os.path.join(args.opt_tools_path, 'opt')),
+        'opt_tools_path': args.opt_tools_path,
+        'passfile': args.passfile or 'auto-generated',
+        'count_mode': args.count_mode,
+        'search_scope': args.search_scope,
+        'dataset': args.dataset,
+        'created': time.strftime('%Y-%m-%d %H:%M:%S'),
+    }, mf, ensure_ascii=False, indent=2)
+print(f'协同对元数据已写入: {meta_path} (供 --reuse_pairs 复用校验)')
 
 print(f"Step1 Completed: Enumeration completed and saved to Step1_{name}_EnumeratedPairs.csv")

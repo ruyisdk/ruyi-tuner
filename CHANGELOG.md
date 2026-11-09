@@ -177,4 +177,13 @@
 - 训练阶段新增 --search_scope 参数（train.py，默认 file，ruyituner.py 透传）：协同对查找的失败 pass 剔除从按文件扩展到 project 模式全局——把"在任一文件上单独运行即失败"的 pass 汇总成全局黑名单，各文件的协同对在写入 Step1 前统一剔除含黑名单 pass 的条目（这些 pass 必然使 project 模式的公共序列在对应文件上崩溃，优化阶段不再遭遇它们的崩溃；file 模式行为不变）；utils/PassSyner.py 的 _process_file 返回每文件的失败集合、FindSynerPasses 汇总并过滤；全局剔除数量默认打印、具体清单由 `RUYITUNER_SHOW_EXCLUDED_PASSES=1` 控制；Readme 训练阶段与参数说明同步更新。
 - 协同对查找的剔除/跳过提示改为带文件路径：按文件的提示由"本文件剔除/跳过…"改为"<文件路径>: 剔除/跳过…"，与 Processing、协同对数量等按文件输出行一致，便于定位崩溃 pass 所属文件。
 - 协同对查找中被剔除 pass 的提示改为直接打印具体名称：按文件与 project 模式全局的剔除提示不再由 `RUYITUNER_SHOW_EXCLUDED_PASSES` 控制是否显示清单，统一直接输出 pass 名（如 "<文件路径>: 剔除 1 个单独运行即失败的 pass: ['function(unify-loop-exits)']"）；Readme 环境变量说明同步更新。
+- 新增协同对复用功能：ruyituner.py 新增 --reuse_pairs 布尔开关（默认 false，传入即复用已有 Step1 协同对跳过训练、直接进行 GA 优化），复用文件由优化工具链架构与项目名自动匹配——候选架构依次取优化工具链 opt 的默认目标架构与数据集 .ll 内嵌 triple 的架构（utils/common.py 新增 opt_default_arch_name 归一化 opt 默认目标架构，aarch64 等默认目标为空的工具链靠数据集架构兑底），按 Step1_<项目名>_<架构>_EnumeratedPairs.csv 命名在 --pair_library 指定目录（默认项目根目录下新建的 pair_library/，已保存 output 中 CSiBE 各项目三架构共 51 个协同对文件）与 output/ 中依次查找；--reuse_pairs 与 --paircsv 不能同时使用。
+- 实际编译对比阶段新增计数口径检查：GA 基线只有按 obj-size 口径（.o 的 .text 字节数）统计时才能与本阶段按字节计的实际编译后总大小直接比较，scripts/real_compile.py 读 Step2 Result.json 中的 count_mode，非 obj-size（text/opt-stats/auto，基线为指令数）时打印警告提示改用 --count_mode obj-size，避免输出无意义甚至为负的缩减率；Readme 实际编译对比阶段说明同步补充该要求。
+- ruyituner.py/train.py/run.py 的 --count_mode 默认值统一改为 obj-size（file 与 project 两种搜索范围一致，单独运行 train.py/run.py 时也生效）：GA 基线与协同对发现按 .o 的 .text 字节数统计，与实际编译对比阶段口径一致、可直接比较，此前漏加 --count_mode obj-size 会拿指令数基线对比字节数导致缩减率为负；显式指定 --count_mode 时以用户为准；帮助文本与 Readme 参数说明、计数方式小节同步更新。
+- 复用前的一致性检查：check_reused_paircsv 核对协同对中的 pass 是否都存在于当前优化工具链 opt 的注册表（不存在的 pass 相关序列在 GA 评分时按 opt 失败处理）、协同对文件名架构后缀与当前数据集架构、以及伴随元数据中的 opt 版本，不一致时打印警告（协同对全部 pass 均不存在于当前 opt 时报错退出，防止工具链完全错配时静默产出劣质结果）。
+- train.py 写 Step1 协同对 CSV 时同步写出伴随元数据 Step1_<项目名>_<架构>_EnumeratedPairs.meta.json（记录 opt 版本/优化工具链路径/passfile/计数方式/搜索范围/数据集路径/生成时间），供 --reuse_pairs 校验工具链一致性；旧协同对文件无元数据，复用时提示人工确认。
+- run.py 读取协同对 CSV 的解析由 eval 改为 ast.literal_eval：utils/common.py 新增 read_paircsv_pairs 安全解析函数（只接受字面量、校验每行为二元组、格式不符时报错退出），避免复用外部 CSV 时执行任意代码；run.py 不再依赖 pandas。
+- Readme 更新：参数说明补充 --reuse_pairs/--pair_library 与复用注意事项，项目结构树新增 pair_library/ 条目，使用演示新增协同对复用示例。
+- scripts/run_csibe_build.py 更名为 scripts/run_csibe.py（脚本内文档与日志前缀、Readme 项目结构树与第 7 节、RunCSiBE.md 的引用同步更新），并新增 --reuse_pairs 参数：指定后每条 ruyituner 命令自动追加 --reuse_pairs，复用 pair_library/ 或 output/ 中已有的 Step1 协同对跳过训练、直接进行 GA 优化（适合已生成过协同对的后续批量运行）；汇总文件头同步记录协同对来源（复用或本次训练生成）；构造命令时不再显式追加 --count_mode obj-size（ruyituner.py 默认口径已是 obj-size）。
+- Readme 补充 --reuse_pairs 复用流程说明：第一次运行（不带 --reuse_pairs）训练后获得的 Step1 协同对文件可留在 output/ 不动，也可保存到 pair_library/ 协同对库长期留存，第二次运行加 --reuse_pairs 即可跳过训练直接复用。
 

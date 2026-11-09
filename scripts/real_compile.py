@@ -189,12 +189,20 @@ def main():
         print('[ruyituner] Pass 列表为空, 跳过实际编译对比.')
         return
     baseline = None
+    result_count_mode = None
     if os.path.isfile(json_path):
         with open(json_path, encoding='utf-8') as fh:
-            baseline = json.load(fh).get('total_baseline')
+            result = json.load(fh)
+            baseline = result.get('total_baseline')
+            result_count_mode = result.get('count_mode')
     if baseline is None:
         print('[ruyituner] 未找到前一步的基线结果, 跳过实际编译对比.')
         return
+    # 基线只有按 obj-size 口径 (clang -O<level> -c 直接编译的 .o .text 字节数)
+    # 统计时才能与本阶段按字节计的实际编译后总大小直接比较; 其它口径 (text/
+    # opt-stats/auto) 的基线是指令数, 与字节数相减会产生无意义甚至为负的缩减率
+    if result_count_mode and result_count_mode != 'obj-size':
+        print(f'[ruyituner] 警告: GA 基线按 {result_count_mode} 口径统计, 与实际编译的 .o 字节数不可直接比较, 缩减率可能无意义; 建议使用 --count_mode obj-size.')
     manifest_path = os.path.join(args.cache_dir, 'baseline_manifest.json')
     try:
         with open(manifest_path, encoding='utf-8') as fh:

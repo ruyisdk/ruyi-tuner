@@ -1,6 +1,8 @@
 import os
 import io,sys
 import re
+import ast
+import csv
 import shlex
 import shutil
 import subprocess
@@ -301,15 +303,88 @@ def dataset_arch_name(dataset_path):
         m = re.search(r'target triple\s*=\s*"([^"]+)"', text)
         if not m:
             continue
-        arch = m.group(1).split('-', 1)[0].lower()
-        if arch in ('x86_64', 'i386', 'i486', 'i586', 'i686'):
-            return 'x86'
-        if arch.startswith('riscv'):
-            return 'riscv'
-        if arch in ('aarch64', 'arm64'):
-            return 'aarch64'
-        return arch
+        return _normalize_arch_name(m.group(1).split('-', 1)[0])
     return None
+
+
+def _normalize_arch_name(arch):
+    '''架构串归一为项目使用的简称 (x86/riscv/aarch64), 未知架构原样返回.'''
+    a = (arch or '').lower()
+    if a in ('x86_64', 'i386', 'i486', 'i586', 'i686'):
+        return 'x86'
+    if a.startswith('riscv'):
+        return 'riscv'
+    if a in ('aarch64', 'arm64'):
+        return 'aarch64'
+    return a
+
+
+def opt_default_arch_name(opt_path):
+    '''opt 默认目标架构的归一简称 (x86/riscv/aarch64), 未设置默认目标返回 None.
+
+    aarch64 等交叉工具链构建时默认目标常为空 (clang 默认 triple 为 unknown),
+    此时返回 None, 由调用方用数据集 .ll 内嵌 triple 的架构兑底.'''
+    arch = get_opt_default_arch(opt_path)
+    if not arch:
+        return None
+    return _normalize_arch_name(arch)
+
+
+def read_paircsv_pairs(paircsv):
+    '''读取 Step1 协同对 CSV, 返回 [(passA, passB), ...].
+
+    用 ast.literal_eval 安全解析 synerpair 字符串 (只接受字面量, 避免执行任意
+    代码), 并校验每行都是二元组; 格式不符时报错退出.'''
+    pairs = []
+    with open(paircsv, newline='', encoding='utf-8') as fh:
+        reader = csv.DictReader(fh)
+        if not reader.fieldnames or 'synerpair' not in reader.fieldnames:
+            raise SystemExit(f'{paircsv}: 不是有效的协同对 CSV (缺少 synerpair 列).')
+        for row in reader:
+            text = (row.get('synerpair') or '').strip()
+            try:
+                item = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                raise SystemExit(f'{paircsv}: 协同对格式无法解析: {text!r}')
+            if not isinstance(item, (tuple, list)) or len(item) != 2:
+                raise SystemExit(f'{paircsv}: 协同对应为二元组: {text!r}')
+            pairs.append(tuple(item))
+    return pairs
+
+
+def paircsv_pass_names(pairs):
+    '''提取协同对中出现过的原始 pass 名 (去掉 module()/function() 等分类包装).'''
+    names = set()
+    for a, b in pairs:
+        for elem in (a, b):
+            if isinstance(elem, str) and '(' in elem:
+                inner = elem[elem.find('(') + 1:elem.rfind(')')].strip()
+                names.add(inner if inner else elem)
+            else:
+                names.add(str(elem))
+    return names
+
+
+def get_opt_pass_names(opt_path):
+    '''从 `opt --print-passes` 收集注册的原始 pass 名集合 (带参数分类只取基名).'''
+    r = subprocess.run([opt_path, '--print-passes'], capture_output=True, text=True)
+    names = set()
+    for raw in (r.stdout or '').splitlines():
+        if not raw.strip():
+            continue
+        if raw[0] not in ' \t':
+            continue
+        names.add(raw.strip().split('<', 1)[0])
+    return names
+
+
+def get_opt_version(opt_path):
+    '''返回 opt 报告的主版本号 (如 22.1.0), 执行失败时返回 None.'''
+    r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    m = re.search(r'LLVM version\s+(\S+)', r.stdout + r.stderr)
+    return m.group(1) if m else None
 
 
 def fix_loop_nesting(pipeline: str) -> str:
