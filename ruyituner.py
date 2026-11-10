@@ -73,7 +73,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 TRAIN_SCRIPT = os.path.join(PROJECT_ROOT, 'scripts', 'train.py')
@@ -96,6 +96,11 @@ from utils.common import (find_clang, dataset_output_name, dataset_arch_name,  #
 # Makefile 变量定义与 $(VAR) 引用
 VAR_ASSIGN_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(:=|=)\s*(.*)$')
 VAR_REF_RE = re.compile(r'\$\(([A-Za-z_][A-Za-z0-9_]*)\)')
+
+# .i 预处理文件中编译器已废弃内建的报错模式 (如远古 GCC 预处理展开的
+# __builtin_next_arg): clang 报 "use of unknown builtin '__builtin_xxx'",
+# 此类文件无法被现代 clang 编译, C→IR 阶段跳过该文件而非终止
+_obsolete_builtin_re = re.compile(r"unknown builtin '__builtin_[A-Za-z_]+'")
 
 
 def read_makefile_variables(mk_path, vpath_dir):
@@ -149,8 +154,12 @@ def extract_project_flags(project_dir):
     """解析 project_dir 目录树下所有 Makefile.in 的 CFLAGS, 提取 -D/-U/-I 参数.
 
     -I 相对路径按该 Makefile.in 所在目录解析为绝对路径 (clang 在数据集根目录下
-    执行也成立); 不存在的头文件目录丢弃并提示; 返回保序去重的参数列表;
+    执行也成立); 解析后位于数据集目录之外的头文件目录 (如 -I../../include 指向
+    CSiBE 共享 include 目录, 其中的旧式兼容头与 glibc 冲突会导致编译失败) 改为
+    -idirafter 追加 (系统头文件优先, 冲突头不再生效, SDL 等系统缺失的头仍可
+    用); 不存在的目录丢弃并提示; 返回保序去重的参数列表;
     目录下没有 Makefile.in 时返回空列表."""
+    project_dir = os.path.abspath(project_dir)
     flags = []
     seen = set()
     makefiles = []
@@ -159,7 +168,7 @@ def extract_project_flags(project_dir):
             if name == 'Makefile.in':
                 makefiles.append(os.path.join(root, name))
     for mk_path in sorted(makefiles):
-        mk_dir = os.path.dirname(mk_path)
+        mk_dir = os.path.dirname(os.path.abspath(mk_path))
         variables = read_makefile_variables(mk_path, mk_dir)
         cflags = expand_make_variables(variables.get('CFLAGS', ''), variables)
         if not cflags.strip():
@@ -169,10 +178,21 @@ def extract_project_flags(project_dir):
                 path = token[2:]
                 if not os.path.isabs(path):
                     path = os.path.join(mk_dir, path)
-                path = os.path.abspath(path)
+                path = os.path.normpath(os.path.abspath(path))
                 if not os.path.isdir(path):
                     print(f'[ruyituner] 丢弃不存在的头文件目录 {token} '
                           f'(来自 {os.path.relpath(mk_path, project_dir)})')
+                    continue
+                # 数据集目录外的头文件目录改为 -idirafter: 系统头文件优先,
+                # 其旧式兼容头 (inttypes.h 等) 不再与 glibc 冲突, 而 SDL/SDL.h
+                # 这类系统没有的头仍能找到
+                if path != project_dir and not path.startswith(project_dir + os.sep):
+                    print(f'[ruyituner] 项目外头文件目录 {token} 改为 -idirafter '
+                          f'(来自 {os.path.relpath(mk_path, project_dir)})')
+                    item = '-idirafter ' + path
+                    if item not in seen:
+                        seen.add(item)
+                        flags.append(item)
                     continue
                 item = '-I' + path
             elif token.startswith(('-D', '-U')):
@@ -227,7 +247,10 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
     c_flags 非 None 时按空白拆分后原样传给 clang (如 -DHAVE_CONFIG_H);
     manifest_path 非 None 时把 .ll 相对路径 -> 原始源文件 的映射连同 src_root/
     c_std/c_flags 写入该 JSON 文件, 供优化阶段用 clang 直接编译源码统计基线;
-    编译失败的源文件告警跳过; 返回 (成功数, 失败数).
+    任一源文件编译失败立即停止整个转换并输出详细错误信息 (文件/命令/退出码/
+    完整 stderr), 不跳过失败文件继续; 仅 .i 预处理文件因编译器已废弃内建
+    (如远古 GCC 预处理展开的 __builtin_next_arg) 导致的失败例外: 该类文件
+    无法被现代 clang 编译, 跳过并提示后继续; 返回 (成功数, 失败文件数).
     """
     src_root = os.path.abspath(src_root)
     single_file = os.path.isfile(src_root)
@@ -327,27 +350,71 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
         # 在数据集根目录下执行, 使 c_flags 中的相对路径 (如 -Iinclude) 以数据集根目录为基准解析
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=src_root)
         if proc.returncode != 0:
-            lines = [line for line in proc.stderr.splitlines() if line.strip()]
-            reason = lines[-1] if lines else f'exit={proc.returncode}'
-            return False, f'{rel}: {reason}'
+            stderr_text = proc.stderr or ''
+            # .i 预处理文件因编译器已废弃内建 (如远古 GCC 展开的
+            # __builtin_next_arg) 导致失败时标记为可跳过, 其余失败一律硬失败
+            skippable = (src.endswith('.i')
+                         and _obsolete_builtin_re.search(stderr_text) is not None)
+            return False, {'rel': rel, 'cmd': cmd,
+                           'exit': proc.returncode,
+                           'stderr': stderr_text.strip(),
+                           'skippable': skippable}
         return True, None
 
     ok = 0
-    failures = []
-    with ThreadPoolExecutor(max_workers=num_workers) as ex:
-        for success, reason in ex.map(_work, src_files):
+    failed_info = None
+    skipped = []
+    remaining = 0
+    ex = ThreadPoolExecutor(max_workers=num_workers)
+    try:
+        futures = [ex.submit(_work, src) for src in src_files]
+        done_count = 0
+        for fut in as_completed(futures):
+            done_count += 1
+            success, info = fut.result()
             if success:
                 ok += 1
-            else:
-                failures.append(reason)
+                continue
+            if info.get('skippable'):
+                # 无法被现代 clang 编译的旧预处理文件: 跳过并提示, 继续其余文件;
+                # 其余任何编译失败仍立即停止整个转换
+                skipped.append(info)
+                continue
+            # 任一个文件编译失败即停止整个转换, 不再编译其余文件 (不跳过继续);
+            # 未启动的任务全部取消, 已在编译的线程任务不再等待其结果
+            failed_info = info
+            remaining = len(futures) - done_count
+            break
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
-    print(f'[ruyituner] C→IR 编译完成: 成功 {ok} 个, 失败 {len(failures)} 个.')
-    if failures:
-        print('[ruyituner] 编译失败的文件 (最多显示20个):')
-        for msg in failures[:20]:
-            print(f'  - {msg}')
-        if len(failures) > 20:
-            print(f'  ... 其余 {len(failures) - 20} 个省略')
+    if failed_info is not None:
+        print(f'[ruyituner] C→IR 编译失败: {failed_info["rel"]} (已成功 {ok} 个)')
+        print(f'[ruyituner] 失败命令: {" ".join(shlex.quote(a) for a in failed_info["cmd"])}')
+        print(f'[ruyituner] clang 退出码: {failed_info["exit"]}')
+        if failed_info['stderr']:
+            print('[ruyituner] clang 错误输出:')
+            print(failed_info['stderr'])
+        else:
+            print('[ruyituner] (clang 无错误输出)')
+        if remaining > 0:
+            print(f'[ruyituner] 已停止: 其余 {remaining} 个文件不再编译.')
+        return ok, 1
+
+    for info in skipped:
+        reason = None
+        for line in info['stderr'].splitlines():
+            if _obsolete_builtin_re.search(line):
+                reason = line.strip()
+                break
+        if reason is None:
+            err_lines = [l.strip() for l in info['stderr'].splitlines() if 'error:' in l]
+            reason = err_lines[0] if err_lines else '编译器已废弃内建'
+        print(f"[ruyituner] 跳过无法编译的旧预处理文件 {info['rel']} ({reason})")
+    if skipped:
+        print(f'[ruyituner] 共跳过 {len(skipped)} 个因编译器已废弃内建而无法编译的旧预处理文件, 其余文件继续.')
+
+    print(f'[ruyituner] C→IR 编译完成: 成功 {ok} 个.')
 
     # 基线清单: 优化阶段据此用 clang -O<level> -c 直接编译源文件统计基线,
     # 跳过 "C→IR→opt" 的中间过程, 更贴近真实编译; 只收录实际生成出 .ll 的
@@ -367,7 +434,7 @@ def compile_c_dataset_to_ir(src_root, cache_dir, clang, num_workers, c_std=None,
         }
         with open(manifest_path, 'w', encoding='utf-8') as fh:
             json.dump(manifest, fh, ensure_ascii=False, indent=2)
-    return ok, len(failures)
+    return ok, 0
 
 
 def build_real_compile_cmd(args, out_dir, cache_dir, total_stages, project_name):
@@ -610,7 +677,12 @@ def main():
         cache_dir = tempfile.mkdtemp(prefix='ruyituner_ir_')
         print(f'[ruyituner] IR 缓存目录: {cache_dir}')
         manifest_path = os.path.join(cache_dir, 'baseline_manifest.json')
-        ok, _failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags, manifest_path=manifest_path, opt_level=ir_opt_level)
+        ok, failed = compile_c_dataset_to_ir(args.dataset, cache_dir, clang, args.num_workers, args.c_std, args.c_flags, manifest_path=manifest_path, opt_level=ir_opt_level)
+        if failed:
+            # 任一源文件编译失败即终止整个流程, 失败详情已由 compile_c_dataset_to_ir 打印
+            print('[ruyituner] C→IR 转换存在编译失败的文件, 终止.')
+            shutil.rmtree(cache_dir, ignore_errors=True)
+            sys.exit(1)
         if ok == 0:
             print('[ruyituner] 未能从任何 .c/.i 文件生成 .ll, 终止.')
             shutil.rmtree(cache_dir, ignore_errors=True)

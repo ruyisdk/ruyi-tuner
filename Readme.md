@@ -128,9 +128,9 @@ python3 ruyituner.py \
 
 **参数说明：**
 - `--dataset`: 数据集目录或单个 .c/.i 源文件（必选，训练与优化共用）
-- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先优化工具链`--opt_tools_path`下的clang，回退系统PATH）以`--ir-opt-level`指定的优化等级（缺省与`--opt-level`一致，默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--ir-opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；编译失败的源文件告警跳过，全部失败则报错退出
+- `--input_type`: 输入文件类型 ll/c（必选）；ll=LLVM IR，走原有训练+优化路径；c=C 源码，先用clang（优先优化工具链`--opt_tools_path`下的clang，回退系统PATH）以`--ir-opt-level`指定的优化等级（缺省与`--opt-level`一致，默认Oz，`clang -<level> -S -emit-llvm`）把数据集目录下所有.c文件（以及预处理后的.i文件）编译为.ll（保持相对目录结构、并行编译；`--ir-opt-level O0`时附加`-Xclang -disable-O0-optnone`避免optnone属性），生成的.ll放入临时缓存目录并作为数据集走后续训练+优化，结束后自动清理；任一源文件编译失败立即停止并输出详细错误信息（失败文件、完整命令、退出码与clang的stderr），不跳过失败文件继续；仅`.i`预处理文件因编译器已废弃内建（如远古GCC预处理展开的`__builtin_next_arg`）导致的失败例外：该类文件无法被现代clang编译，跳过并提示后继续
 - `--c_std`: (可选) 传给clang的C语言标准（如gnu89），仅`--input_type c`时生效；不提供时，若数据集为CSiBE等自带Makefile.in的项目则自动默认为gnu89（与CSiBE官方构建的-ansi口径一致），否则不传`-std`参数；旧式C代码（K&R/C89）需要它，否则clang会因隐式函数声明报错
-- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时，若数据集为CSiBE等自带Makefile.in的项目则自动解析其中CFLAGS的`-D`/`-U`/`-I`参数（`-I`相对路径按该Makefile.in所在目录解析为绝对路径，不存在的头文件目录丢弃并提示，`-w`/`-ansi`/`-fno-builtin`等不传），无需手工提供；显式提供时追加在自动解析参数之后，可覆盖同类自动参数；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`，mpeg2dec等autoconf工程需要）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
+- `--c_flags`: (可选) 传给clang的额外编译参数（如`-DHAVE_CONFIG_H`，支持空格分隔多个），仅`--input_type c`时生效；不提供时，若数据集为CSiBE等自带Makefile.in的项目则自动解析其中CFLAGS的`-D`/`-U`/`-I`参数（`-I`相对路径按该Makefile.in所在目录解析为绝对路径，不存在的头文件目录丢弃并提示，解析后位于数据集目录之外的目录改为`-idirafter`追加——系统头文件优先，避免旧式兼容头与glibc冲突，SDL等系统缺失的头仍可用，`-w`/`-ansi`/`-fno-builtin`等不传），无需手工提供；显式提供时追加在自动解析参数之后，可覆盖同类自动参数；依赖autoconf生成头文件的基准（如flex）需要它；相对路径（如`-Iinclude`）以数据集根目录为基准解析；值以-开头时`--c_flags=-DHAVE_CONFIG_H`与`--c_flags '-DHAVE_CONFIG_H'`两种写法均可
 - `--baseline_tools_path`: 基线工具链路径（必选）；用于基线的直接编译/统计（obj-size 口径下 clang -O<level> -c 编译源码成 .o，其余口径用其 opt 计算基线）；缺省同时作为优化工具链；原参数名 `--llvm_tools_path` 已更名（旧名兼容保留）
 - `--opt_tools_path`: (可选) 优化工具链路径；用于 clang/opt/llc 三段过程（C→IR 转换、训练、GA 评分与实际编译对比）；缺省与 `--baseline_tools_path` 相同
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
@@ -327,7 +327,7 @@ train.py、run.py 与 ruyituner.py 均支持 `--count_mode` 参数（可选，�
 RuyiTuner 通过 `--input_type` 参数支持两类输入（参数详见第 1 节）：
 
 - **LLVM IR（`--input_type ll`）**：数据集目录下放置 .ll 文件（如 `datasets/ll_files/x86`、`datasets/ll_files/riscv`）。目标架构完全由每个 .ll 文件内嵌的 target triple 决定，需要和工具链的目标架构匹配；仅需工具链中的 opt，直接进入训练/优化流程。
-- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。优化工具链需包含 clang，先用 clang 以 `--ir-opt-level` 指定的优化等级（缺省与 `--opt-level` 一致，默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译、失败告警跳过；`--ir-opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用基线工具链的 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源采用 `--opt-level` 优化等级（C→IR 生成等级由 `--ir-opt-level` 控制，缺省与之相同）。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
+- **C 源码（`--input_type c`）**：数据集目录下放置 .c 或预处理后的 .i 文件（如 `datasets/c_files/CSiBE-v2.1.1` 下的各个 benchmark），也支持直接指定单个 .c/.i 文件。优化工具链需包含 clang，先用 clang 以 `--ir-opt-level` 指定的优化等级（缺省与 `--opt-level` 一致，默认 Oz，`clang -<level> -S -emit-llvm`）将源文件编译为 .ll（保持相对目录结构、并行编译；任一文件编译失败立即终止并输出详细错误信息，不跳过失败文件继续——仅`.i`预处理文件因编译器已废弃内建（如`__builtin_next_arg`）导致的失败除外，该类文件跳过并提示；`--ir-opt-level O0` 时附加 `-Xclang -disable-O0-optnone` 避免 optnone 属性），再进入训练/优化流程，结束后自动清理临时 IR。评分阶段（`--count_mode obj-size` 时）的基线直接用基线工具链的 clang 以 `--opt-level` 优化等级把源文件编译为 .o 并统计 .text 大小（`clang -O<level> -c`，与真实编译一致），不再经过 IR 中间表示；训练与 GA 优化过程不变，仅基线数据来源采用 `--opt-level` 优化等级（C→IR 生成等级由 `--ir-opt-level` 控制，缺省与之相同）。旧式 C 代码（K&R/C89）需 `--c_std gnu89`，依赖编译宏或自定义头文件路径的 benchmark 可用 `--c_flags` 追加参数。该模式下，没有目标架构约束，目标架构由工具链的目标架构决定。因此，该模式天然支持x86、RISC-V等架构。
 
 CSiBE v2.1.1 各 benchmark 的具体运行命令与实测优化率见 [RunCSiBE.md](./RunCSiBE.md)。也可以直接使用scripts/run_csibe.py来自动运行CSiBE。
 
@@ -393,7 +393,7 @@ python3 scripts/run_csibe.py \
 ## 注意事项
 
 - 小数据集上 `-Os` 与 `-Oz` 的基线结果可能完全相同（GA 得分无差异）；要体现优化等级之间的差别并获得更丰富的协同对，建议使用更大的真实程序构建的数据集；
-- `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件会被跳过并告警；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
+- `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件一旦出现会使整个流程报错终止；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（以 `--opt-level O0` 生成时加 `-Xclang -disable-O0-optnone`，其余优化等级前端不会产生该属性）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
 - 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
 - 复用旧协同对（`--reuse_pairs`）时务必使用生成该协同对时的同一优化工具链：不同LLVM版本/构建的opt注册的pass不同，旧协同对中的pass在新opt中可能不存在或行为变化，导致GA结果劣化；工具会打印警告但不会阻止运行（全部pass都不存在时除外）。
