@@ -1,0 +1,11 @@
+{
+  "project_name": "unrarlib-0.4.0_riscv",
+  "pair_count": 410,
+  "opt_version": "22.1.0-rc2",
+  "opt_tools_path": "/home/ningning/llvm-project/build-riscv-22.1.0/bin",
+  "passfile": "auto-generated",
+  "count_mode": "obj-size",
+  "search_scope": "project",
+  "dataset": "/tmp/ruyituner_ir__xytidv0",
+  "created": "2026-11-09 18:54:57"
+}

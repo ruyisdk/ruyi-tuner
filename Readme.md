@@ -45,7 +45,7 @@ RuyiTuner 是一款基于优化协同效应分析的 LLVM 编译优化调优工�
 │   ├── Step3_<项目名>_<架构>_data.txt             # 实际编译对比阶段: 单项目跑完后留存的本阶段关键数据
 │   ├── CSiBE_build_summary.txt                    # run_csibe.py 批量运行后各项目实际编译对比阶段输出的汇总
 │   └── CSiBE_build_data.tsv                       # run_csibe.py 批量运行后自动生成的数据表格
-├── pair_library/       # 协同对库: 保存训练得到的 Step1 协同对供 --reuse_pairs 复用 (当前含 CSiBE 各项目三架构的协同对)
+├── pair_library/       # 协同对库: 保存训练得到的 Step1 协同对供 --reuse_pairs 复用 (当前含 CSiBE v2.1.1 全部 17 个项目 × 3 架构(x86/riscv/aarch64) 共 51 个协同对, 均由 LLVM 22.1.0-rc2 生成, 每个 CSV 配 .meta.json 元数据)
 ├── passes_examples/    # pass列表的一些示例文件
 │   ├── passes_21.1.8.txt              # 手动筛选的LLVM 21.1.8版本的pass列表
 │   ├── passes_22.1.0.txt              # 手动筛选的LLVM 22.1.0版本的pass列表
@@ -100,7 +100,7 @@ python3 ruyituner.py \
 # output/不动，也可保存（复制/移动）到pair_library/（协同对库目录）长期留存，供后续
 # 多次复用；第二次运行加--reuse_pairs即跳过训练直接进行GA优化，复用文件由优化工具链
 # 架构与项目名自动匹配（依次在pair_library/与output/中查找）；
-# 应使用生成该协同对时的同一优化工具链
+# pair_library/当前保存的51个协同对均由LLVM 22.1.0-rc2生成，复用时应使用同版本优化工具链
 python3 ruyituner.py \
     --dataset ./datasets/c_files/CSiBE-v2.1.1/bzip2-1.0.2 \
     --input_type c \
@@ -136,8 +136,8 @@ python3 ruyituner.py \
 - `--output_dir`: (可选) 训练输出目录，默认项目根目录下的output/，自动创建
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv`
-- `--reuse_pairs`: (可选) 布尔开关（默认false），传入即复用已有协同对跳过训练、直接进行GA优化；首次运行（不带本开关）训练得到的 Step1 协同对文件可留在 `output/` 不动，也可保存到 `pair_library/` 协同对库长期留存，第二次运行加本开关即可复用；复用文件由优化工具链架构与项目名自动匹配——候选架构依次取优化工具链opt的默认目标架构与数据集.ll内嵌triple的架构，按`Step1_<项目名>_<架构>_EnumeratedPairs.csv`命名在`--pair_library`目录与`output/`中依次查找；与`--paircsv`不能同时使用；复用前会检查协同对中的pass是否都存在于当前优化工具链opt的注册表、文件名架构后缀与数据集架构是否一致、以及伴随元数据(.meta.json)中的opt版本，不一致时输出警告（全部pass均不存在时报错退出）；`--input_type c`时C→IR编译仍会执行（GA评分需要.ll与基线清单）
-- `--pair_library`: (可选) 协同对库存放目录，默认`<项目根目录>/pair_library`（仅`--reuse_pairs`时使用）
+- `--reuse_pairs`: (可选) 布尔开关（默认false），传入即复用已有协同对跳过训练、直接进行GA优化；首次运行（不带本开关）训练得到的 Step1 协同对文件可留在 `output/` 不动，也可保存到 `pair_library/` 协同对库长期留存，第二次运行加本开关即可复用；复用文件由优化工具链架构与项目名自动匹配——候选架构依次取优化工具链opt的默认目标架构与数据集.ll内嵌triple的架构，按`Step1_<项目名>_<架构>_EnumeratedPairs.csv`命名在`--pair_library`目录与`output/`中依次查找（`pair_library/` 当前保存 CSiBE v2.1.1 全部 17 个项目 × 3 架构共 51 个协同对，均由 LLVM 22.1.0-rc2 工具链生成）；与`--paircsv`不能同时使用；复用前会检查协同对中的pass是否都存在于当前优化工具链opt的注册表、文件名架构后缀与数据集架构是否一致、以及伴随元数据(.meta.json)中的opt版本，不一致时输出警告（全部pass均不存在时报错退出）；`--input_type c`时C→IR编译仍会执行（GA评分需要.ll与基线清单）
+- `--pair_library`: (可选) 协同对库存放目录，默认`<项目根目录>/pair_library`（仅`--reuse_pairs`时使用）；仓库自带的该目录现含 CSiBE v2.1.1 全部 17 个项目 × 3 架构共 51 个 Step1 协同对（CSV 与 .meta.json 成对，均由 LLVM 22.1.0-rc2 生成，协同对合计 20026 条：x86 6750、riscv 7457、aarch64 5819）
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--ir-opt-level`: (可选) C→IR转换时clang的优化等级O0/O1/O2/O3/Os/Oz，缺省与`--opt-level`一致；仅`--input_type c`时生效（GA基线评分与实际编译对比仍使用`--opt-level`）
@@ -386,7 +386,7 @@ python3 scripts/run_csibe.py \
 - `--tar_path`/`--force`/`--no_download`: (可选) 源码包缓存路径/已存在仍强制重下/跳过下载与解压
 - `--riscv_sysroot`/`--riscv_sysroot_projects`: (可选) riscv 需要 glibc 头文件的项目追加的 `--sysroot` 路径（默认 `/opt/riscv/sysroot`，置空关闭）及应用该参数的项目列表（逗号分隔，默认 `libmspack`）
 - `--opt-level`/`--ir-opt-level`: (可选) 追加到每条 ruyituner 命令的基线优化等级/C→IR 转换优化等级（缺省不追加）
-- `--reuse_pairs`: (可选) 每条 ruyituner 命令追加 `--reuse_pairs`，复用 `pair_library/` 或 `output/` 中已有的 Step1 协同对跳过训练、直接进行 GA 优化（适合已生成过协同对的后续批量运行）
+- `--reuse_pairs`: (可选) 每条 ruyituner 命令追加 `--reuse_pairs`，复用 `pair_library/`（当前 51 个协同对均由 LLVM 22.1.0-rc2 生成）或 `output/` 中已有的 Step1 协同对跳过训练、直接进行 GA 优化（适合已生成过协同对的后续批量运行）
 - `--output`/`--data_output`: (可选) 汇总输出文件/数据表格输出文件（TSV），默认 `output/CSiBE_build_summary.txt` 与 `output/CSiBE_build_data.tsv`
 - `--dry_run`: (可选) 只解析并打印将执行的命令，不实际运行
 
@@ -396,7 +396,7 @@ python3 scripts/run_csibe.py \
 - `ruyituner.py` 的 `--input_type c` 要求数据集的 .c/.i 文件能被 clang 独立编译（CSiBE 中 linux 内核等依赖构建系统的 .c 文件一旦出现会使整个流程报错终止；.i 为预处理后的 C 源码，lwip-0.5.3.preproc 等纯 .i 数据集可直接使用）；生成的 .ll 临时缓存目录在流程结束（含提前退出）后自动清理；
 - 数据集中的 .ll 文件需内嵌 `target triple`，且不要带 `optnone` 属性（以 `--opt-level O0` 生成时加 `-Xclang -disable-O0-optnone`，其余优化等级前端不会产生该属性）；否则 opt 会跳过全部 pass，导致单 Pass 不生效、训练找不到协同对；
 - 在x86环境下，训练/优化 RISC-V 数据集时，把 `--dataset` 指向 `datasets/ll_files/riscv`，并搭配面向 RISC-V 的交叉编译工具链（即默认目标为 riscv64 的 LLVM 构建），使 pass 列表与基线评分都按 RISC-V 语义执行。
-- 复用旧协同对（`--reuse_pairs`）时务必使用生成该协同对时的同一优化工具链：不同LLVM版本/构建的opt注册的pass不同，旧协同对中的pass在新opt中可能不存在或行为变化，导致GA结果劣化；工具会打印警告但不会阻止运行（全部pass都不存在时除外）。
+- 复用旧协同对（`--reuse_pairs`）时务必使用生成该协同对时的同一优化工具链：不同LLVM版本/构建的opt注册的pass不同，旧协同对中的pass在新opt中可能不存在或行为变化，导致GA结果劣化；工具会打印警告但不会阻止运行（全部pass都不存在时除外）。`pair_library/` 中现有 51 个协同对均由 LLVM 22.1.0-rc2 生成（x86/riscv/aarch64 各用对应架构的 22.1.0-rc2 构建），复用这些协同对时应搭配同版本的三套优化工具链。
 
 ## 参考文献
 

@@ -1,0 +1,11 @@
+{
+  "project_name": "mpeg2dec-0.3.1_riscv",
+  "pair_count": 456,
+  "opt_version": "22.1.0-rc2",
+  "opt_tools_path": "/home/ningning/llvm-project/build-riscv-22.1.0/bin",
+  "passfile": "auto-generated",
+  "count_mode": "obj-size",
+  "search_scope": "project",
+  "dataset": "/tmp/ruyituner_ir_iemg1ub7",
+  "created": "2026-11-09 14:35:24"
+}

@@ -1,0 +1,11 @@
+{
+  "project_name": "ttt-0.10.1.preproc_x86",
+  "pair_count": 240,
+  "opt_version": "22.1.0-rc2",
+  "opt_tools_path": "/home/ningning/llvm-project/build-x86-22.1.0/bin",
+  "passfile": "auto-generated",
+  "count_mode": "obj-size",
+  "search_scope": "project",
+  "dataset": "/tmp/ruyituner_ir_3t1zqy5p",
+  "created": "2026-11-09 18:29:58"
+}
