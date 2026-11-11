@@ -76,7 +76,7 @@ class PassSyner:
             _log_line(f'{tag}{name}: 跳过 {pair_failures} 个组合级 opt 失败 '
                       f'(两个 pass 单独可用但组合后失败)。')
 
-        _log_line(f'{tag}{name}: syner_passpairs 数量 {len(syner_passpairs)}')
+        _log_line(f'{tag}{name}: 协同 pass 对数量 {len(syner_passpairs)}')
 
         # 始终返回本文件的失败黑名单: project 模式下 FindSynerPasses 汇总各文件
         # 的 failed 集合形成全局黑名单, 无协同对的文件同样参与汇总
@@ -114,6 +114,11 @@ class PassSyner:
                 if result is not None:
                     results.append(result)
 
+        # 各文件协同对数量求和 (同一协同对可能被多个文件找到, 去重后才是 Step1
+        # 的实际条目数)
+        generated_pairs = sum(len(pairs) for _, pairs, _ in results)
+        _log_line(f'协同对生成总数: {generated_pairs} 个 (各文件求和, 未去重).')
+
         if self.search_scope == 'project':
             # 全局黑名单: 任一文件上单独运行即失败的 pass (崩溃/无法统计)
             global_failed = set()
@@ -137,7 +142,10 @@ class PassSyner:
         else:
             results = [(filename, pairs) for filename, pairs, _ in results if pairs]
 
-        print(f"协同对查找完成: {len(results)} 个文件找到协同 pass 对.")
+        kept_pairs = sum(len(pairs) for _, pairs in results)
+        unique_pairs = len({pair for _, pairs in results for pair in pairs})
+        print(f"协同对查找完成: {len(results)} 个文件找到协同 pass 对, "
+              f"保留 {kept_pairs} 个协同对, 去重后 {unique_pairs} 个唯一协同对.")
         return results
 
     

@@ -373,6 +373,8 @@ with open(output_path, mode='w', encoding='utf-8', newline='') as outfile:
                 seen_elements.add(element)
                 index_counter += 1
 
+print(f'协同对枚举完成: 去重后共 {index_counter} 个唯一协同对, 已写入 {output_path}')
+
 # 协同对复用配套元数据: 记录本次生成时的工具链版本等, 供 --reuse_pairs 复用
 # 时校验协同对与当前优化工具链是否一致 (旧文件没有该元数据, 只能人工确认)
 meta_path = os.path.join(args.output_dir, f'Step1_{name}_EnumeratedPairs.meta.json')
