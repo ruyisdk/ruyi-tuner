@@ -1,6 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
-from utils.common import get_instrcount
+from utils.common import get_instrcount, _log_line
 
 
 class PassSyner:
@@ -12,10 +12,14 @@ class PassSyner:
         self.count_mode = count_mode
         self.search_scope = search_scope
 
-    def _process_file(self, filepath):
+    def _process_file(self, filepath, index=None, total=None):
         with open(filepath, 'r') as ll_file:
             ll_code = ll_file.read()
-        print("Processing:", filepath)
+        # 进度行与结果行统一带 [序号/总数] 前缀, 结果行再带文件名: 各文件并行
+        # 处理, 输出顺序不固定, 靠前缀对应到具体文件
+        tag = f'[{index}/{total}] ' if index is not None and total is not None else ''
+        name = os.path.basename(filepath)
+        _log_line(f'{tag}Processing: {filepath}')
 
         original_codesize = get_instrcount(ll_code, [], tools_path=self.llvm_tools_path, count_mode=self.count_mode)
         syner_passpairs = []
@@ -44,7 +48,7 @@ class PassSyner:
                 action_aval.append(action)
 
         if failed:
-            print(f"{filepath}: 剔除 {len(failed)} 个单独运行即失败的 pass: {sorted(failed)}")
+            _log_line(f'{tag}{name}: 剔除 {len(failed)} 个单独运行即失败的 pass: {sorted(failed)}')
 
         # 组合级失败计数: 两个 pass 单独可用但组合后 opt 失败, 只跳过该组合、
         # 不剔除任何 pass (单独运行无元凶, 无法安全归因到某一个 pass)
@@ -69,15 +73,14 @@ class PassSyner:
                     syner_passpairs.append((action1, action2))
 
         if pair_failures:
-            print(f"{filepath}: 跳过 {pair_failures} 个组合级 opt 失败 (两个 pass 单独可用但组合后失败)。")
+            _log_line(f'{tag}{name}: 跳过 {pair_failures} 个组合级 opt 失败 '
+                      f'(两个 pass 单独可用但组合后失败)。')
 
-        print(f"The number of syner_passpairs in {filepath}: " , len(syner_passpairs))
-        
-        filename = os.path.basename(filepath)
+        _log_line(f'{tag}{name}: syner_passpairs 数量 {len(syner_passpairs)}')
 
         # 始终返回本文件的失败黑名单: project 模式下 FindSynerPasses 汇总各文件
         # 的 failed 集合形成全局黑名单, 无协同对的文件同样参与汇总
-        return filename, syner_passpairs, failed
+        return name, syner_passpairs, failed
 
     def FindSynerPasses(self):
         """查找所有 .ll 文件的协同 pass 对, 返回 [(文件名, [(A, B), ...]), ...].
@@ -99,8 +102,13 @@ class PassSyner:
                         ll_files.append(os.path.join(root, file))
 
         results = []
+        total = len(ll_files)
+        if total:
+            _log_line(f'协同对查找开始: 共 {total} 个 .ll 文件, '
+                      f'并行线程 {min(self.num_works, total)} 个.')
         with ThreadPoolExecutor(max_workers=self.num_works) as executor:
-            futures = [executor.submit(self._process_file, filepath) for filepath in ll_files]
+            futures = [executor.submit(self._process_file, filepath, index, total)
+                       for index, filepath in enumerate(ll_files, 1)]
             for future in futures:
                 result = future.result()
                 if result is not None:

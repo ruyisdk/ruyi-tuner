@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
 
 
 # 项目根目录 (scripts/utils/common.py -> scripts -> 项目根), 供外部脚本/历史依赖使用
@@ -456,6 +457,22 @@ def fix_loop_nesting(pipeline: str) -> str:
     return ','.join(fixed_passes)
 
 
+# 并行任务输出锁: print 会把多个参数分多次写入, 多线程下不同文件的输出会互相
+# 穿插 (如 "Processing:Processing: a.ll"); 统一在锁内把整行拼好一次写出
+_LOG_LOCK = threading.Lock()
+
+
+def _log_line(*parts):
+    '''线程安全地输出一整行 (并行任务的进度/结果行用).
+
+    并行线程直接 print 多个参数会分多次写入标准输出, 不同线程的写入相互穿插,
+    出现 "Processing:Processing: xxx" 这类错乱; 本函数在锁内拼好整行后一次写出,
+    并立即刷新, 保证每行完整可读.'''
+    line = ' '.join(str(p) for p in parts)
+    with _LOG_LOCK:
+        print(line, flush=True)
+
+
 def _report_opt_failure(pipeline, stderr_text):
     '''opt 执行失败时把关键报错信息打印到 stderr, 便于排查(如 unknown pass).
 
@@ -465,7 +482,9 @@ def _report_opt_failure(pipeline, stderr_text):
         return
     msg = (stderr_text or "").strip()
     key_line = msg.splitlines()[-1] if msg else "no stderr output"
-    print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr)
+    # 并行任务里同样会调用, 整行写出避免与标准输出的进度行在同一行内交错
+    with _LOG_LOCK:
+        print(f'[opt failed] passes="{pipeline}": {key_line}', file=sys.stderr, flush=True)
 
 
 # 工具子进程超时(秒): 防止个别 pass/序列挂起时批量任务永久阻塞.
