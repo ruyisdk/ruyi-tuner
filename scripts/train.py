@@ -95,6 +95,17 @@ INSTRUMENTATION_PATTERN = re.compile(
 # 模块清空, 导致 GA 评分虚高为 1.0 (假胜利), 因此在生成 pass 列表时默认剔除
 INTERNALIZE_PATTERN = re.compile(r'^internalize$')
 
+# 已知会误编译的 pass: structurizecfg 在多个 CSiBE 项目上实测产生功能错误的代码
+# (bzip2/zlib/libpng/jpeg-6b/flex/jikespg/compiler 等), 单独归为“已知误编译类”,
+# 在初始 pass 列表生成阶段直接剔除, 不参与后续协同对查找与 GA 搜索
+KNOWN_MISCOMPILE_PATTERN = re.compile(r'^structurizecfg$')
+
+# CFG 结构化/规范化类 pass: unify-loop-exits 要求 CFG 中所有终结指令都是直接
+# 分支 br, 遇到 switch/indirectbr 会 assert (Release 构建下实测 SIGSEGV); 它只做
+# 循环出口统一, 不是代码体积优化 pass (bzip2/bzlib 上单独使用 .text 反而约
+# +1.6%~1.9%), 因此单独归为一类在初始 pass 列表生成时剔除
+CFG_STRUCTURING_PATTERN = re.compile(r'^unify-loop-exits$')
+
 
 def get_opt_version(opt_path):
     r = subprocess.run([opt_path, '--version'], capture_output=True, text=True)
@@ -200,7 +211,9 @@ def generate_passlist(args, write_default=True):
     version = get_opt_version(opt_path)
     print(f'opt 版本: {version} ({opt_path})')
 
-    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN), ('内部化类', INTERNALIZE_PATTERN)]
+    exclude_patterns = [('观察/调试类', OBSERVER_PATTERN), ('内部化类', INTERNALIZE_PATTERN),
+                        ('CFG 结构化/规范化类', CFG_STRUCTURING_PATTERN),
+                        ('已知误编译类', KNOWN_MISCOMPILE_PATTERN)]
     if not args.keep_instrumentation:
         exclude_patterns.append(('插桩类', INSTRUMENTATION_PATTERN))
     if args.extra_exclude:
