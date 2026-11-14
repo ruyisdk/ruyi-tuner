@@ -1,11 +1,11 @@
 {
   "project_name": "libmspack_riscv",
-  "pair_count": 709,
+  "pair_count": 679,
   "opt_version": "22.1.0-rc2",
   "opt_tools_path": "/home/ningning/llvm-project/build-riscv-22.1.0/bin",
   "passfile": "auto-generated",
   "count_mode": "obj-size",
   "search_scope": "project",
-  "dataset": "/tmp/ruyituner_ir_chaanmed",
-  "created": "2026-11-09 12:35:48"
+  "dataset": "/tmp/ruyituner_ir_oc3qneqz",
+  "created": "2026-11-13 13:34:07"
 }

@@ -137,7 +137,7 @@ python3 ruyituner.py \
 - `--passfile`: (可选) 训练用的pass列表文件；不提供时由train.py自动生成（默认不写文件）
 - `--paircsv`: (可选) 优化用的协同对CSV，默认`<output_dir>/Step1_<项目名>_<架构>_EnumeratedPairs.csv`
 - `--reuse_pairs`: (可选) 布尔开关（默认false），传入即复用已有协同对跳过训练、直接进行GA优化；首次运行（不带本开关）训练得到的 Step1 协同对文件可留在 `output/` 不动，也可保存到 `pair_library/` 协同对库长期留存，第二次运行加本开关即可复用；复用文件由优化工具链架构与项目名自动匹配——候选架构依次取优化工具链opt的默认目标架构与数据集.ll内嵌triple的架构，按`Step1_<项目名>_<架构>_EnumeratedPairs.csv`命名在`--pair_library`目录与`output/`中依次查找（`pair_library/` 当前保存 CSiBE v2.1.1 全部 17 个项目 × 3 架构共 51 个协同对，均由 LLVM 22.1.0-rc2 工具链生成）；与`--paircsv`不能同时使用；复用前会检查协同对中的pass是否都存在于当前优化工具链opt的注册表、文件名架构后缀与数据集架构是否一致、以及伴随元数据(.meta.json)中的opt版本，不一致时输出警告（全部pass均不存在时报错退出）；`--input_type c`时C→IR编译仍会执行（GA评分需要.ll与基线清单）
-- `--pair_library`: (可选) 协同对库存放目录，默认`<项目根目录>/pair_library`（仅`--reuse_pairs`时使用）；仓库自带的该目录现含 CSiBE v2.1.1 全部 17 个项目 × 3 架构共 51 个 Step1 协同对（CSV 与 .meta.json 成对，均由 LLVM 22.1.0-rc2 生成，协同对合计 20026 条：x86 6750、riscv 7457、aarch64 5819）
+- `--pair_library`: (可选) 协同对库存放目录，默认`<项目根目录>/pair_library`（仅`--reuse_pairs`时使用）；仓库自带的该目录现含 CSiBE v2.1.1 全部 17 个项目 × 3 架构共 51 个 Step1 协同对（CSV 与 .meta.json 成对，均由 LLVM 22.1.0-rc2 生成，协同对合计 19120 条：x86 6524、riscv 6992、aarch64 5604）
 - `--num_workers`: (可选) 训练并行线程数，默认16
 - `--opt-level`: (可选) GA基线评分的优化等级O0/O1/O2/O3/Os/Oz，默认Oz（透传给run.py）
 - `--ir-opt-level`: (可选) C→IR转换时clang的优化等级O0/O1/O2/O3/Os/Oz，缺省与`--opt-level`一致；仅`--input_type c`时生效（GA基线评分与实际编译对比仍使用`--opt-level`）

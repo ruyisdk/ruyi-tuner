@@ -1,11 +1,11 @@
 {
   "project_name": "lwip-0.5.3.preproc_aarch64",
-  "pair_count": 140,
+  "pair_count": 100,
   "opt_version": "22.1.0-rc2",
   "opt_tools_path": "/home/ningning/llvm-project/build-aarch64-22.1.0/bin",
   "passfile": "auto-generated",
   "count_mode": "obj-size",
   "search_scope": "project",
-  "dataset": "/tmp/ruyituner_ir_u7m9ci0u",
-  "created": "2026-11-09 14:15:23"
+  "dataset": "/tmp/ruyituner_ir_5ml7vkx7",
+  "created": "2026-11-13 15:22:43"
 }

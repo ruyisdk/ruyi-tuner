@@ -1,11 +1,11 @@
 {
   "project_name": "ttt-0.10.1.preproc_riscv",
-  "pair_count": 17,
+  "pair_count": 9,
   "opt_version": "22.1.0-rc2",
   "opt_tools_path": "/home/ningning/llvm-project/build-riscv-22.1.0/bin",
   "passfile": "auto-generated",
   "count_mode": "obj-size",
   "search_scope": "project",
-  "dataset": "/tmp/ruyituner_ir_yh5gm2yi",
-  "created": "2026-11-09 18:31:44"
+  "dataset": "/tmp/ruyituner_ir_abn5bfzh",
+  "created": "2026-11-13 20:53:35"
 }

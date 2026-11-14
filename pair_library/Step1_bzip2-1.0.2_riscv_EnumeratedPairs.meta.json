@@ -1,11 +1,11 @@
 {
   "project_name": "bzip2-1.0.2_riscv",
-  "pair_count": 641,
+  "pair_count": 632,
   "opt_version": "22.1.0-rc2",
   "opt_tools_path": "/home/ningning/llvm-project/build-riscv-22.1.0/bin",
   "passfile": "auto-generated",
   "count_mode": "obj-size",
   "search_scope": "project",
-  "dataset": "/tmp/ruyituner_ir_9vl6ajc8",
-  "created": "2026-11-09 08:04:24"
+  "dataset": "/tmp/ruyituner_ir_1cz5u84m",
+  "created": "2026-11-13 08:47:39"
 }
